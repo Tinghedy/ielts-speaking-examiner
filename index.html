@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>IELTS 口說模擬考</title>
+  <meta name="description" content="IELTS Speaking 模擬考官（Gemini Live API）" />
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151614" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="IELTS 口說" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>IELTS 口說模擬考</h1>
+      <span class="subtitle">Speaking Test · Gemini Live</span>
+    </div>
+    <div class="topbar-right">
+      <span id="micState" class="pill" data-kind="off">麥克風關閉</span>
+      <span id="status" class="pill" data-kind="idle">尚未開始</span>
+      <span class="elapsed" title="總時長"><span id="elapsed">0:00</span></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel side">
+      <div class="actions">
+        <button id="startBtn" class="btn primary">開始考試</button>
+        <button id="endBtn" class="btn danger" disabled>結束考試</button>
+      </div>
+
+      <ol id="parts" class="parts">
+        <li data-step="1"><span class="num">1</span><span><b>Part 1</b><small>自我介紹與問答 · 4–5 分鐘</small></span></li>
+        <li data-step="2"><span class="num">2</span><span><b>Part 2</b><small>題卡長答 · 準備 1 分鐘＋說 1–2 分鐘</small></span></li>
+        <li data-step="3"><span class="num">3</span><span><b>Part 3</b><small>延伸討論 · 4–5 分鐘</small></span></li>
+        <li data-step="feedback"><span class="num">✓</span><span><b>回饋</b><small>四項 band 估計與改法</small></span></li>
+      </ol>
+
+      <div id="timerCard" class="timer" data-mode="idle">
+        <div id="timerLabel" class="timer-label">計時</div>
+        <div id="timerClock" class="timer-clock">0:00</div>
+        <div class="timer-track"><div id="timerBar" class="timer-bar"></div></div>
+        <div id="timerHint" class="timer-hint">Part 2 會在這裡顯示準備與作答倒數</div>
+        <button id="manualPrepBtn" class="btn small" hidden>手動開始 1 分鐘準備</button>
+      </div>
+
+      <div id="cueCard" class="cue" hidden>
+        <div class="cue-label">Part 2 題卡</div>
+        <p id="cueTopic" class="cue-topic"></p>
+        <p class="cue-say">You should say:</p>
+        <ul id="cueBullets"></ul>
+        <p id="cueFinal" class="cue-final"></p>
+      </div>
+
+      <details id="settings" class="settings">
+        <summary>設定</summary>
+        <div class="apikey">
+          <div class="apikey-head">Gemini API key <span id="apiKeyState" class="pill" data-kind="off">尚未設定</span></div>
+          <div class="apikey-row">
+            <input id="apiKeyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="貼上 AI Studio 的 API key" />
+            <button id="saveKeyBtn" class="btn small">儲存</button>
+          </div>
+          <button id="clearKeyBtn" class="link" hidden>清除這台裝置上的 key</button>
+          <p class="tip">key 只存在這台裝置的瀏覽器，不會上傳到其他地方。在 Mac 上用 <code>server.py</code> 啟動時可以不填。到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> 取得。</p>
+        </div>
+        <label>考官聲音
+          <select id="voiceSelect">
+            <option value="Charon" selected>Charon（沉穩）</option>
+            <option value="Kore">Kore（堅定）</option>
+            <option value="Puck">Puck（輕快）</option>
+            <option value="Fenrir">Fenrir（有活力）</option>
+            <option value="Aoede">Aoede（明亮）</option>
+          </select>
+        </label>
+        <label>麥克風
+          <select id="micSelect"><option value="">預設麥克風</option></select>
+        </label>
+        <label>音量
+          <input id="volume" type="range" min="0" max="100" value="90" />
+        </label>
+        <p class="tip">建議戴耳機，避免考官的聲音被麥克風收進去。</p>
+      </details>
+
+      <button id="downloadBtn" class="btn ghost" disabled>下載逐字稿與回饋（.md）</button>
+    </aside>
+
+    <section class="panel main">
+      <div id="notice" class="notice" hidden></div>
+
+      <div class="transcript-head">
+        <h2>逐字稿</h2>
+        <span class="legend"><i class="dot examiner"></i>Examiner <i class="dot candidate"></i>我</span>
+      </div>
+      <div id="transcriptScroll" class="transcript-scroll">
+        <div id="transcriptEmpty" class="empty">
+          按「開始考試」後允許麥克風，考官會先開口。<br />
+          考試中不會糾正或提示；結束後會產生中文回饋。
+        </div>
+        <div id="transcript" class="transcript"></div>
+      </div>
+
+      <section id="feedback" class="feedback" hidden>
+        <div class="feedback-head">
+          <h2>考後回饋</h2>
+          <div class="overall"><span>總分估計</span><b id="overallBand">–</b></div>
+        </div>
+        <p id="feedbackSummary" class="summary"></p>
+        <div id="feedbackBody" class="criteria"></div>
+        <p class="disclaimer">分數為 AI 依官方評分標準所做的估計，僅供練習參考。</p>
+      </section>
+    </section>
+  </main>
+
+  <script src="geminilive.js"></script>
+  <script src="mediaUtils.js"></script>
+  <script src="question-bank.js"></script>
+  <script src="examiner.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
