@@ -1070,18 +1070,41 @@ function renderHintData(body, data, note) {
 
 // ─── Tutor review (tutor.js) ──────────────────────────────────────────────────
 
-const tutor = {
-  status: "idle", // idle | streaming | ready | error | nokey
-  turns: [], // { role: "user" | "model", text }; the first user turn is the prompt + transcript
-  error: "",
-  controller: null,
-  frame: 0, // pending render while streaming
-};
+// A tutor conversation shown in one set of elements: the current session's
+// (in the main panel) or a past one opened from the history (in a dialog).
+function newChat(ids, render) {
+  return {
+    id: null, // history record id, set when the review starts
+    createdAt: 0,
+    title: "",
+    subtitle: "",
+    transcript: "",
+    turns: [], // { role: "user" | "model", text }; the first user turn is the prompt + transcript
+    status: "idle", // idle | streaming | ready | error | nokey
+    error: "",
+    controller: null,
+    frame: 0, // pending render while streaming
+    ids, // element ids: log, status, form, send
+    render,
+  };
+}
+
+const tutor = newChat({ log: "tutorLog", status: "tutorStatus", form: "tutorForm", send: "tutorSend" }, () => renderTutor());
+const viewer = newChat({ log: "historyLog", status: "historyStatus", form: "historyForm", send: "historySend" }, () => renderViewer());
 
 function resetTutor() {
   if (tutor.controller) tutor.controller.abort();
-  Object.assign(tutor, { status: "idle", turns: [], error: "", controller: null });
+  Object.assign(tutor, { id: null, createdAt: 0, title: "", subtitle: "", transcript: "", turns: [], status: "idle", error: "", controller: null });
   renderTutor();
+}
+
+// What the session practised, for the history list
+function sessionSummary() {
+  const topics = state.examTopics;
+  const names = [];
+  if (topics && state.plan.includes(1)) names.push(topics.opener.topic, ...topics.part1.map((t) => t.topic));
+  if (topics && (state.plan.includes(2) || state.plan.includes(3))) names.push(`Describe ${topics.part2.card}`);
+  return { title: PRACTICE_MODES[state.mode].label, subtitle: names.join("、") };
 }
 
 function startTutor() {
@@ -1091,56 +1114,64 @@ function startTutor() {
     renderTutor();
     return;
   }
-  tutor.turns = [{ role: "user", text: buildTutorOpening(transcriptAsText(), state.part2.card) }];
-  askTutor();
+  const transcript = transcriptAsText();
+  Object.assign(tutor, {
+    id: `tutor-${Date.now()}`,
+    createdAt: state.startedAt || Date.now(),
+    ...sessionSummary(),
+    transcript,
+    turns: [{ role: "user", text: buildTutorOpening(transcript, state.part2.card) }],
+  });
+  askTutor(tutor);
 }
 
-function replyTutor(text) {
-  if (!text.trim() || tutor.status !== "ready") return;
-  tutor.turns.push({ role: "user", text: text.trim() });
-  askTutor();
+function replyTutor(chat, text) {
+  if (!text.trim() || chat.status !== "ready") return;
+  chat.turns.push({ role: "user", text: text.trim() });
+  askTutor(chat);
 }
 
-// Stream the tutor's answer to the last user turn
-function askTutor() {
+// Stream the tutor's answer to the last user turn, then save the conversation
+function askTutor(chat) {
   const apiKey = loadApiKey();
   if (!apiKey) {
-    tutor.status = "nokey";
-    renderTutor();
+    chat.status = "nokey";
+    chat.render();
     return;
   }
-  if (tutor.controller) tutor.controller.abort();
+  if (chat.controller) chat.controller.abort();
   const controller = new AbortController();
   const reply = { role: "model", text: "" };
-  const history = [...tutor.turns];
-  tutor.turns.push(reply);
-  Object.assign(tutor, { status: "streaming", error: "", controller });
-  renderTutor();
+  const history = [...chat.turns];
+  chat.turns.push(reply);
+  Object.assign(chat, { status: "streaming", error: "", controller });
+  chat.render();
 
   streamTutor(history, apiKey, {
     signal: controller.signal,
     onText: (text) => {
-      if (tutor.controller !== controller) return;
+      if (chat.controller !== controller) return;
       reply.text = text;
       // Re-render at most once per frame while text streams in
-      if (!tutor.frame) tutor.frame = requestAnimationFrame(() => ((tutor.frame = 0), renderTutor()));
+      if (!chat.frame) chat.frame = requestAnimationFrame(() => ((chat.frame = 0), chat.render()));
     },
   })
     .then((text) => {
-      if (tutor.controller !== controller) return;
+      if (chat.controller !== controller) return;
       reply.text = text;
-      tutor.status = "ready";
+      chat.status = "ready";
+      saveChat(chat);
     })
     .catch((error) => {
-      if (tutor.controller !== controller) return;
+      if (chat.controller !== controller) return;
       console.error("Tutor failed:", error);
-      tutor.turns.splice(tutor.turns.indexOf(reply), 1); // a cut-off answer can't be continued
-      Object.assign(tutor, { status: "error", error: error.message });
+      chat.turns.splice(chat.turns.indexOf(reply), 1); // a cut-off answer can't be continued
+      Object.assign(chat, { status: "error", error: error.message });
     })
     .finally(() => {
-      if (tutor.controller !== controller) return;
-      tutor.controller = null;
-      renderTutor();
+      if (chat.controller !== controller) return;
+      chat.controller = null;
+      chat.render();
     });
 }
 
@@ -1162,12 +1193,17 @@ function renderTutor() {
   if (section.hidden) return;
 
   $("tutorStartBtn").hidden = tutor.turns.length > 0 || tutor.status === "streaming";
-  $("tutorForm").hidden = tutor.status !== "ready";
-  $("tutorSend").disabled = tutor.status !== "ready";
+  renderChat(tutor);
+}
 
-  const log = $("tutorLog");
+// The conversation, status line and reply box of one chat
+function renderChat(chat) {
+  $(chat.ids.form).hidden = chat.status !== "ready";
+  $(chat.ids.send).disabled = chat.status !== "ready";
+
+  const log = $(chat.ids.log);
   log.innerHTML = "";
-  tutor.turns.forEach((turn, i) => {
+  chat.turns.forEach((turn, i) => {
     if (i === 0) return; // the prompt and transcript
     const msg = makeEl("div", `tutor-msg ${turn.role}`);
     if (turn.role === "model") {
@@ -1180,25 +1216,180 @@ function renderTutor() {
     log.appendChild(msg);
   });
 
-  const status = $("tutorStatus");
+  const status = $(chat.ids.status);
   status.innerHTML = "";
-  status.hidden = !["streaming", "error", "nokey"].includes(tutor.status);
-  status.dataset.kind = tutor.status === "streaming" ? "" : "error";
-  if (tutor.status === "streaming") {
-    status.textContent = "家教批改中…（完整批改約需 30–90 秒）";
-  } else if (tutor.status === "nokey") {
+  status.hidden = !["streaming", "error", "nokey"].includes(chat.status);
+  status.dataset.kind = chat.status === "streaming" ? "" : "error";
+  if (chat.status === "streaming") {
+    status.textContent = chat.turns.length > 2 ? "家教回覆中…" : "家教批改中…（完整批改約需 30–90 秒）";
+  } else if (chat.status === "nokey") {
     status.append("家教複習需要在「設定」填入 Gemini API key。 ");
     const btn = makeEl("button", "link hints-action", "打開設定");
     btn.type = "button";
-    btn.addEventListener("click", openSettings);
+    btn.addEventListener("click", () => {
+      if (chat === viewer) $("historyDialog").close();
+      openSettings();
+    });
     status.appendChild(btn);
-  } else if (tutor.status === "error") {
-    status.append(`批改失敗：${tutor.error} `);
+  } else if (chat.status === "error") {
+    status.append(`批改失敗：${chat.error} `);
     const btn = makeEl("button", "link hints-action", "重試");
     btn.type = "button";
-    btn.addEventListener("click", () => (tutor.turns.length ? askTutor() : startTutor()));
+    btn.addEventListener("click", () => (chat.turns.length ? askTutor(chat) : startTutor()));
     status.appendChild(btn);
   }
+}
+
+// ─── Tutor history (stored only in this browser) ──────────────────────────────
+
+const TUTOR_HISTORY_STORAGE = "ielts-examiner.tutor-history";
+const TUTOR_HISTORY_LIMIT = 30;
+
+function loadHistory() {
+  try {
+    const list = JSON.parse(localStorage.getItem(TUTOR_HISTORY_STORAGE));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+// Newest first; drops the oldest records if the browser runs out of space
+function storeHistory(list) {
+  list.sort((a, b) => b.createdAt - a.createdAt);
+  list = list.slice(0, TUTOR_HISTORY_LIMIT);
+  while (list.length) {
+    try {
+      localStorage.setItem(TUTOR_HISTORY_STORAGE, JSON.stringify(list));
+      return true;
+    } catch {
+      if (list.length === 1) break;
+      list = list.slice(0, -1);
+    }
+  }
+  return false;
+}
+
+function saveChat(chat) {
+  if (!chat.id) return;
+  const record = {
+    id: chat.id,
+    createdAt: chat.createdAt,
+    updatedAt: Date.now(),
+    title: chat.title,
+    subtitle: chat.subtitle,
+    transcript: chat.transcript,
+    turns: chat.turns.map(({ role, text }) => ({ role, text })),
+  };
+  const list = loadHistory().filter((r) => r.id !== chat.id);
+  if (!storeHistory([record, ...list])) showNotice("家教複習紀錄無法儲存（瀏覽器空間不足或是無痕模式）。", "error");
+  renderHistory();
+}
+
+function deleteRecord(id) {
+  if (!confirm("刪除這筆家教複習紀錄？")) return;
+  storeHistory(loadHistory().filter((r) => r.id !== id));
+  if (viewer.id === id && $("historyDialog").open) $("historyDialog").close();
+  renderHistory();
+}
+
+function formatWhen(timestamp) {
+  return new Date(timestamp).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function renderHistory() {
+  const list = loadHistory();
+  $("historyCount").textContent = list.length ? `（${list.length}）` : "";
+  $("historyEmpty").hidden = list.length > 0;
+  const ul = $("historyList");
+  ul.innerHTML = "";
+  for (const record of list) {
+    const li = makeEl("li", "history-item");
+    if (viewer.id === record.id && $("historyDialog").open) li.dataset.active = "true";
+    const open = makeEl("button", "history-open");
+    open.type = "button";
+    open.append(makeEl("b", "", `${formatWhen(record.createdAt)} · ${record.title}`), makeEl("small", "", record.subtitle || ""));
+    open.addEventListener("click", () => openRecord(record.id));
+    const del = makeEl("button", "history-delete", "✕");
+    del.type = "button";
+    del.title = "刪除";
+    del.setAttribute("aria-label", "刪除這筆紀錄");
+    del.addEventListener("click", () => deleteRecord(record.id));
+    li.append(open, del);
+    ul.appendChild(li);
+  }
+}
+
+function openRecord(id) {
+  // The review of the session on screen: just go there
+  if (id === tutor.id && !$("tutor").hidden) {
+    $("tutor").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const record = loadHistory().find((r) => r.id === id);
+  if (!record) return;
+  if (viewer.controller) viewer.controller.abort();
+  const last = record.turns[record.turns.length - 1];
+  Object.assign(viewer, {
+    id: record.id,
+    createdAt: record.createdAt,
+    title: record.title,
+    subtitle: record.subtitle,
+    transcript: record.transcript || "",
+    turns: record.turns.map((t) => ({ ...t })),
+    status: last && last.role === "model" ? "ready" : "error",
+    error: last && last.role === "model" ? "" : "上次的回覆沒有完成",
+    controller: null,
+  });
+  const dialog = $("historyDialog");
+  if (!dialog.open) dialog.showModal();
+  renderViewer();
+  renderHistory();
+  $("historyLog").scrollTop = 0;
+  dialog.scrollTop = 0;
+}
+
+function renderViewer() {
+  $("historyTitle").textContent = viewer.title || "家教複習";
+  $("historyMeta").textContent = [formatWhen(viewer.createdAt), viewer.subtitle].filter(Boolean).join(" · ");
+  $("historyTranscript").textContent = viewer.transcript;
+  $("historyTranscriptBox").hidden = !viewer.transcript;
+  renderChat(viewer);
+}
+
+function downloadRecord() {
+  const md = [`# 家教複習：${viewer.title}`, "", `- 日期：${new Date(viewer.createdAt).toLocaleString("zh-TW", { hour12: false })}`];
+  if (viewer.subtitle) md.push(`- 話題：${viewer.subtitle}`);
+  for (const turn of viewer.turns.slice(1).filter((t) => t.text)) {
+    md.push("", turn.role === "model" ? turn.text.trim() : `**我的回覆：**\n\n${quoteMd(turn.text)}`);
+  }
+  if (viewer.transcript) md.push("", "## 逐字稿", "", "```", viewer.transcript, "```");
+  const d = new Date(viewer.createdAt);
+  const pad = (n) => String(n).padStart(2, "0");
+  const blob = new Blob([md.join("\n") + "\n"], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ielts-tutor-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Reply box: send button and ⌘/Ctrl + Enter
+function bindChatForm(chat, inputId) {
+  const form = $(chat.ids.form);
+  const input = $(inputId);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (chat.status !== "ready" || !input.value.trim()) return;
+    replyTutor(chat, input.value);
+    input.value = "";
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) form.requestSubmit();
+  });
 }
 
 // ─── Study list after the test (study.js) ─────────────────────────────────────
@@ -1742,7 +1933,7 @@ window.addEventListener("DOMContentLoaded", () => {
     for (const area of ["vocab", "fixes"]) {
       if (study[area].status === "nokey") startStudy(area);
     }
-    if (tutor.status === "nokey") tutor.turns.length ? askTutor() : startTutor();
+    if (tutor.status === "nokey") tutor.turns.length ? askTutor(tutor) : startTutor();
   });
   $("clearKeyBtn").addEventListener("click", () => {
     saveApiKey("");
@@ -1769,16 +1960,16 @@ window.addEventListener("DOMContentLoaded", () => {
   $("hintsToggle").addEventListener("change", (e) => setHintsOn(e.target.checked));
   $("studyStartBtn").addEventListener("click", () => startStudy());
   $("tutorStartBtn").addEventListener("click", startTutor);
-  $("tutorForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const input = $("tutorInput");
-    if (tutor.status !== "ready" || !input.value.trim()) return;
-    replyTutor(input.value);
-    input.value = "";
+  bindChatForm(tutor, "tutorInput");
+  bindChatForm(viewer, "historyInput");
+  $("historyClose").addEventListener("click", () => $("historyDialog").close());
+  $("historyDownload").addEventListener("click", downloadRecord);
+  $("historyDialog").addEventListener("close", renderHistory);
+  // Click on the backdrop closes the dialog
+  $("historyDialog").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.close();
   });
-  $("tutorInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("tutorForm").requestSubmit();
-  });
+  renderHistory();
 
   populateMics();
   renderApiKey();

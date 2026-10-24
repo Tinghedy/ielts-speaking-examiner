@@ -65,6 +65,12 @@
         <p id="cueFinal" class="cue-final"></p>
       </div>
 
+      <details id="history" class="history" open>
+        <summary>家教複習紀錄<span id="historyCount" class="count"></span></summary>
+        <ul id="historyList" class="history-list"></ul>
+        <p id="historyEmpty" class="tip">還沒有紀錄。考完按「家教複習」，批改完成後會自動存在這台裝置的瀏覽器裡。</p>
+      </details>
+
       <details id="settings" class="settings">
         <summary>設定</summary>
         <div class="apikey">
@@ -176,6 +182,29 @@
       </section>
     </section>
   </main>
+
+  <dialog id="historyDialog" class="history-dialog" aria-labelledby="historyTitle">
+    <div class="history-dialog-head">
+      <div class="history-dialog-title">
+        <h2 id="historyTitle">家教複習</h2>
+        <p id="historyMeta" class="tip"></p>
+      </div>
+      <div class="history-dialog-actions">
+        <button id="historyDownload" class="btn small ghost" type="button">下載（.md）</button>
+        <button id="historyClose" class="btn small ghost" type="button" aria-label="關閉">✕</button>
+      </div>
+    </div>
+    <details id="historyTranscriptBox" class="study-past">
+      <summary>這次的逐字稿</summary>
+      <pre id="historyTranscript" class="history-transcript" lang="en"></pre>
+    </details>
+    <div id="historyLog" class="tutor-log"></div>
+    <p id="historyStatus" class="hints-note" hidden></p>
+    <form id="historyForm" class="tutor-form" hidden>
+      <textarea id="historyInput" rows="3" placeholder="繼續回覆家教…（⌘ / Ctrl + Enter 送出）" lang="en"></textarea>
+      <button id="historySend" class="btn primary small" type="submit">送出</button>
+    </form>
+  </dialog>
 
   <script src="geminilive.js"></script>
   <script src="mediaUtils.js"></script>
