@@ -34,6 +34,8 @@ const state = {
   player: null,
   systemInstruction: "",
   examTopics: null,
+  mode: "full", // key of PRACTICE_MODES
+  plan: [1, 2, 3], // the parts this session covers, in order
   resumeHandle: null,
   reconnects: 0,
   isReconnecting: false,
@@ -150,7 +152,7 @@ function transcriptAsText() {
     if (entry.role === "system") continue;
     if (entry.part !== currentPart) {
       currentPart = entry.part;
-      lines.push(`\n--- Part ${currentPart || 1} ---`);
+      lines.push(`\n--- Part ${currentPart || state.plan[0]} ---`);
     }
     lines.push(`${entry.role === "examiner" ? "Examiner" : "Candidate"}: ${entry.text.trim()}`);
   }
@@ -160,7 +162,7 @@ function transcriptAsText() {
 // ─── Exam flow ────────────────────────────────────────────────────────────────
 
 function setPart(part) {
-  if (![1, 2, 3].includes(part) || part === state.part) return;
+  if (!state.plan.includes(part) || part === state.part) return;
   state.part = part;
   state.partStartedAt = Date.now();
   if (part === 3 && state.part2.stage !== "none") stopPart2Timer();
@@ -170,7 +172,8 @@ function setPart(part) {
 }
 
 function startPart2Preparation(card) {
-  if (state.phase !== PHASE.EXAM || ["prep", "waiting", "speaking"].includes(state.part2.stage)) return;
+  if (state.phase !== PHASE.EXAM || !state.plan.includes(2)) return;
+  if (["prep", "waiting", "speaking"].includes(state.part2.stage)) return;
   setPart(2);
   state.part2 = { stage: "prep", card, endsAt: Date.now() + TIMING.prepSec * 1000 };
   setMicMuted(true);
@@ -307,6 +310,44 @@ function openSettings() {
   $("apiKeyInput").focus();
 }
 
+// ─── Practice mode (remembered in this browser) ───────────────────────────────
+
+const MODE_STORAGE = "ielts-examiner.practice-mode";
+
+function loadMode() {
+  try {
+    const mode = localStorage.getItem(MODE_STORAGE);
+    return PRACTICE_MODES[mode] ? mode : "full";
+  } catch {
+    return "full";
+  }
+}
+
+function saveMode(mode) {
+  try {
+    localStorage.setItem(MODE_STORAGE, mode);
+  } catch {
+    // Private mode: the choice just won't be remembered
+  }
+}
+
+// The finished session keeps its own mode until the next one starts (for the export)
+function applyMode(mode) {
+  state.mode = PRACTICE_MODES[mode] ? mode : "full";
+  state.plan = PRACTICE_MODES[state.mode].parts;
+}
+
+function populateModes() {
+  const select = $("modeSelect");
+  for (const [value, { label }] of Object.entries(PRACTICE_MODES)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+  select.value = state.mode;
+}
+
 // ─── Connection ───────────────────────────────────────────────────────────────
 
 // With a saved API key the browser connects directly (static hosting).
@@ -360,6 +401,7 @@ async function createClient(resumeHandle) {
 async function startExam() {
   if (state.phase !== PHASE.IDLE && state.phase !== PHASE.DONE) return;
   resetExam();
+  applyMode($("modeSelect").value);
   state.phase = PHASE.CONNECTING;
   render();
   showNotice("");
@@ -379,8 +421,8 @@ async function startExam() {
     await state.streamer.start($("micSelect").value || null);
     populateMics();
 
-    state.examTopics = pickExamTopics();
-    state.systemInstruction = buildSystemInstruction(state.examTopics);
+    state.examTopics = pickExamTopics(state.plan);
+    state.systemInstruction = buildSystemInstruction(state.examTopics, state.plan);
     state.client = await createClient(null);
     state.streamer.client = state.client;
   } catch (error) {
@@ -420,7 +462,7 @@ function handleMessage(client, message, isResumed) {
 
     case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
       if (!message.data.finished) {
-        if (state.part === 0 && state.phase === PHASE.EXAM) setPart(1);
+        if (state.part === 0 && state.phase === PHASE.EXAM) setPart(state.plan[0]);
         addTranscript("examiner", message.data.text);
       }
       break;
@@ -595,7 +637,8 @@ function tick() {
 
     if (state.part === 1 && !state.wrapUpSent[1] && partElapsed >= TIMING.part1WrapUpSec) {
       state.wrapUpSent[1] = true;
-      sendSilentNote("Part 1 has lasted about 4.5 minutes. After the candidate's current answer, move on to Part 2.");
+      const next = state.plan.includes(2) ? "move on to Part 2" : "end the test as instructed";
+      sendSilentNote(`Part 1 has lasted about 4.5 minutes. After the candidate's current answer, ${next}.`);
     }
     if (state.part === 3 && !state.wrapUpSent[3] && partElapsed >= TIMING.part3WrapUpSec) {
       state.wrapUpSent[3] = true;
@@ -653,6 +696,7 @@ function renderButtons() {
   $("manualPrepBtn").hidden = !(state.phase === PHASE.EXAM && state.part === 2 && state.part2.stage === "none");
   $("voiceSelect").disabled = running;
   $("micSelect").disabled = running;
+  $("modeSelect").disabled = running;
 }
 
 function renderParts() {
@@ -664,7 +708,8 @@ function renderParts() {
       else if (state.phase === PHASE.FEEDBACK) status = "current";
     } else {
       const n = Number(step);
-      if (state.phase === PHASE.FEEDBACK || state.feedback || n < state.part) status = "done";
+      if (!state.plan.includes(n)) status = "skip";
+      else if (state.phase === PHASE.FEEDBACK || state.feedback || n < state.part) status = "done";
       else if (n === state.part && state.phase === PHASE.EXAM) status = "current";
     }
     li.dataset.status = status;
@@ -1088,12 +1133,17 @@ function buildMarkdown() {
   md.push(`- 日期：${started.toLocaleString("zh-TW", { hour12: false })}`);
   md.push(`- 模型：${MODEL}`);
   md.push(`- 總時長：${formatClock(duration)}`);
+  md.push(`- 練習範圍：${PRACTICE_MODES[state.mode].label}`);
   const topics = state.examTopics;
   if (topics) {
     const mark = (t) => (t.isNew ? "（本期新題）" : "");
     md.push(`- 題庫：${QUESTION_BANK_LABEL}`);
-    md.push(`- Part 1 話題：${topics.opener.topic}、${topics.part1.map((t) => t.topic + mark(t)).join("、")}`);
-    md.push(`- Part 2 題卡：Describe ${topics.part2.card}${mark(topics.part2)}`);
+    if (state.plan.includes(1)) {
+      md.push(`- Part 1 話題：${topics.opener.topic}、${topics.part1.map((t) => t.topic + mark(t)).join("、")}`);
+    }
+    if (state.plan.includes(2) || state.plan.includes(3)) {
+      md.push(`- ${state.plan.includes(2) ? "Part 2 題卡" : "Part 3 討論主題"}：Describe ${topics.part2.card}${mark(topics.part2)}`);
+    }
   }
 
   const fb = state.feedback;
@@ -1222,6 +1272,16 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   window.addEventListener("beforeunload", (e) => {
     if ([PHASE.EXAM, PHASE.FEEDBACK].includes(state.phase)) e.preventDefault();
+  });
+
+  applyMode(loadMode());
+  populateModes();
+  $("modeSelect").addEventListener("change", (e) => {
+    saveMode(e.target.value);
+    if (state.phase === PHASE.IDLE) {
+      applyMode(e.target.value);
+      renderParts();
+    }
   });
 
   hints.on = loadHintsPref();

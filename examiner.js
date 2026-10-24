@@ -15,14 +15,26 @@ function loadRecent() {
   }
 }
 
-function rememberTopics(selection) {
+// Which parts each practice mode covers, in order
+const PRACTICE_MODES = {
+  full: { parts: [1, 2, 3], label: "完整模考（Part 1–3）" },
+  p1: { parts: [1], label: "只練 Part 1" },
+  p2: { parts: [2], label: "只練 Part 2" },
+  p23: { parts: [2, 3], label: "Part 2 + Part 3" },
+  p3: { parts: [3], label: "只練 Part 3" },
+};
+
+// Only topics that were actually used count as recent
+function rememberTopics(selection, parts) {
   const recent = loadRecent();
   const push = (key, values) => {
     recent[key] = [...values, ...(recent[key] || []).filter((v) => !values.includes(v))].slice(0, RECENT_LIMIT[key]);
   };
-  push("opener", [selection.opener.topic]);
-  push("part1", selection.part1.map((t) => t.topic));
-  push("part2", [selection.part2.card]);
+  if (parts.includes(1)) {
+    push("opener", [selection.opener.topic]);
+    push("part1", selection.part1.map((t) => t.topic));
+  }
+  if (parts.includes(2) || parts.includes(3)) push("part2", [selection.part2.card]);
   try {
     localStorage.setItem(RECENT_STORAGE, JSON.stringify(recent));
   } catch {
@@ -45,14 +57,14 @@ function drawTopics(list, count, recentNames, nameOf) {
   return picked;
 }
 
-function pickExamTopics() {
+function pickExamTopics(parts) {
   const recent = loadRecent();
   const selection = {
     opener: drawTopics(PART1_OPENERS, 1, recent.opener || [], (t) => t.topic)[0],
     part1: drawTopics(PART1_TOPICS, 2, recent.part1 || [], (t) => t.topic),
     part2: drawTopics(PART2_CARDS, 1, recent.part2 || [], (c) => c.card)[0],
   };
-  rememberTopics(selection);
+  rememberTopics(selection, parts);
   return selection;
 }
 
@@ -60,12 +72,65 @@ function describeTopic({ topic, samples }) {
   return `"${topic}" (typical questions: ${samples.join(" / ")})`;
 }
 
-function buildSystemInstruction(selection) {
+function describeParts(parts) {
+  return parts.length === 1 ? `Part ${parts[0]}` : `Parts ${parts.join(" and ")}`;
+}
+
+function buildSystemInstruction(selection, parts = [1, 2, 3]) {
   const [topicA, topicB] = selection.part1;
   const card = selection.part2.card;
   const part3 = PART3_DIRECTIONS[selection.part2.part3];
+  const has = (n) => parts.includes(n);
+  const full = parts.length === 3;
+  const endTest = `say "Thank you. That is the end of the speaking test." and call end_exam`;
 
-  return `You are a certified IELTS Speaking examiner conducting a full, realistic IELTS Speaking test with one candidate. Speak British English with a neutral, professional, polite and friendly-but-formal examiner manner. Use British spelling and vocabulary. Speak at a natural pace.
+  const scope = full
+    ? "a full, realistic IELTS Speaking test"
+    : `a realistic IELTS Speaking practice session that covers only ${describeParts(parts)} of the test`;
+
+  const opening = has(1)
+    ? ""
+    : `
+## Opening
+Start speaking immediately (do not call any tool first). Say: "Good morning/afternoon. My name is [a common British first name]. Today we're going to practise ${describeParts(parts)} of the speaking test." Then go straight into Part ${parts[0]} as described below. Do not ask for the candidate's name and do not ask any Part 1 questions.
+`;
+
+  const part1Section = `
+## Part 1: Introduction and interview (about 4 to 5 minutes)
+1. Start speaking immediately (do not call any tool first). Introduce yourself: "Good morning/afternoon. My name is [a common British first name]. Could you tell me your full name, please?" Then: "And what can I call you?"
+2. Ask about the opening topic ${describeTopic(selection.opener)}, then the topic ${describeTopic(topicA)}, then the topic ${describeTopic(topicB)}. Ask about 3 to 4 short questions per topic. Use the typical questions as your basis, worded naturally as a real examiner would, and add your own follow-ups.
+3. Base each follow-up question on what the candidate has just said (pick up a detail they mentioned), while staying on the current topic. Real Part 1 questions are short and personal.
+4. When the software tells you Part 1 time is up, finish the current exchange${has(2) ? " and move on." : `, then ${endTest}.`}
+`;
+
+  const part2Section = `
+## Part 2: Individual long turn (3 to 4 minutes)
+1. Say: "${has(1) ? "Thank you. Now, in this second part, I'm" : "In this part, I'm"} going to give you a topic, and I'd like you to talk about it for one to two minutes. Before you talk, you'll have one minute to think about what you're going to say. You can make some notes if you wish."
+2. Use this cue card: "Describe ${card}." Add exactly three "You should say:" bullet points and a final "and explain ..." line in the official IELTS format, the way this card normally appears in the real test. Read the cue card aloud.
+3. Then say "Your one minute starts now." and, at the end of that turn, call set_exam_part with part=2 and start_part2_preparation with the cue card content. After calling it, say nothing more. Stay completely silent until the software tells you the preparation time is over.
+4. When the software says preparation is over, say: "All right? Remember you have one to two minutes for this, so don't worry if I stop you. I'll tell you when the time is up. Can you start speaking now, please?"
+5. While the candidate is speaking, do not interrupt. If they pause briefly, stay silent and let them continue. Only if they clearly stop well before the time limit, say once "Can you tell me a little more?" or ask one rounding-off question.
+6. When the software tells you the two minutes are up, interrupt politely right away: "Thank you. I'm afraid we have to stop there." Then you may ask one brief rounding-off question (for example "Do you think you'll do this again?"), accept a short answer, and ${has(3) ? "continue to Part 3." : `then ${endTest}.`}
+`;
+
+  const part3Section = `
+## Part 3: Discussion (about 4 to 5 minutes)
+1. Say: ${
+    has(2)
+      ? `"We've been talking about ${card}, and I'd like to discuss with you one or two more general questions related to this."`
+      : `"I'd like to discuss with you some general questions related to this topic: ${card}."`
+  } Then ask your first Part 3 question and, at the end of that turn, call set_exam_part with part=3.
+2. Ask abstract, analytical questions linked to the Part 2 topic (society, comparisons, causes, effects, past versus future, advantages and disadvantages). One question at a time.${part3 ? ` Directions commonly asked for this card in the real test: ${part3}` : ""}
+3. Follow up on what the candidate has just said: ask them to justify, give an example, compare, or speculate ("Why do you think that is?", "Is that the same in other countries?", "How might that change in the future?").
+4. When the software tells you Part 3 time is up, finish the current exchange, then ${endTest}.
+`;
+
+  const sections = (has(1) ? part1Section : "") + (has(2) ? part2Section : "") + (has(3) ? part3Section : "");
+  const scopeNote = full
+    ? ""
+    : ` This session covered only ${describeParts(parts)}, so base every band only on that evidence and never count the parts that were not practised as a weakness.`;
+
+  return `You are a certified IELTS Speaking examiner conducting ${scope} with one candidate. Speak British English with a neutral, professional, polite and friendly-but-formal examiner manner. Use British spelling and vocabulary. Speak at a natural pace.
 
 ## Messages from the exam software
 Some user messages start with "[SYSTEM]". They come from the exam software (timers and buttons), NOT from the candidate. Follow them, never read them aloud and never mention them.
@@ -79,27 +144,7 @@ Some user messages start with "[SYSTEM]". They come from the exam software (time
 - Keep your own turns short. Do not summarise the candidate's answers.
 - Call the exam tools exactly as described below. Never say the tool names aloud.
 - Always speak first and call a tool only at the END of your spoken turn. Never call a tool before you have said what you need to say in that turn.
-
-## Part 1: Introduction and interview (about 4 to 5 minutes)
-1. Start speaking immediately (do not call any tool first). Introduce yourself: "Good morning/afternoon. My name is [a common British first name]. Could you tell me your full name, please?" Then: "And what can I call you?"
-2. Ask about the opening topic ${describeTopic(selection.opener)}, then the topic ${describeTopic(topicA)}, then the topic ${describeTopic(topicB)}. Ask about 3 to 4 short questions per topic. Use the typical questions as your basis, worded naturally as a real examiner would, and add your own follow-ups.
-3. Base each follow-up question on what the candidate has just said (pick up a detail they mentioned), while staying on the current topic. Real Part 1 questions are short and personal.
-4. When the software tells you Part 1 time is up, finish the current exchange and move on.
-
-## Part 2: Individual long turn (3 to 4 minutes)
-1. Say: "Thank you. Now, in this second part, I'm going to give you a topic, and I'd like you to talk about it for one to two minutes. Before you talk, you'll have one minute to think about what you're going to say. You can make some notes if you wish."
-2. Use this cue card: "Describe ${card}." Add exactly three "You should say:" bullet points and a final "and explain ..." line in the official IELTS format, the way this card normally appears in the real test. Read the cue card aloud.
-3. Then say "Your one minute starts now." and, at the end of that turn, call set_exam_part with part=2 and start_part2_preparation with the cue card content. After calling it, say nothing more. Stay completely silent until the software tells you the preparation time is over.
-4. When the software says preparation is over, say: "All right? Remember you have one to two minutes for this, so don't worry if I stop you. I'll tell you when the time is up. Can you start speaking now, please?"
-5. While the candidate is speaking, do not interrupt. If they pause briefly, stay silent and let them continue. Only if they clearly stop well before the time limit, say once "Can you tell me a little more?" or ask one rounding-off question.
-6. When the software tells you the two minutes are up, interrupt politely right away: "Thank you. I'm afraid we have to stop there." Then you may ask one brief rounding-off question (for example "Do you think you'll do this again?"), accept a short answer, and continue to Part 3.
-
-## Part 3: Discussion (about 4 to 5 minutes)
-1. Say: "We've been talking about ${card}, and I'd like to discuss with you one or two more general questions related to this." Then ask your first Part 3 question and, at the end of that turn, call set_exam_part with part=3.
-2. Ask abstract, analytical questions linked to the Part 2 topic (society, comparisons, causes, effects, past versus future, advantages and disadvantages). One question at a time.${part3 ? ` Directions commonly asked for this card in the real test: ${part3}` : ""}
-3. Follow up on what the candidate has just said: ask them to justify, give an example, compare, or speculate ("Why do you think that is?", "Is that the same in other countries?", "How might that change in the future?").
-4. When the software tells you Part 3 time is up, finish the current exchange, then say "Thank you. That is the end of the speaking test." and call end_exam.
-
+${opening}${sections}
 ## After the test: feedback in Traditional Chinese
 After end_exam, the software will send you the automatic transcript of the candidate's answers. Then:
 1. Call submit_feedback immediately. Do not read the feedback aloud.
@@ -108,7 +153,7 @@ After end_exam, the software will send you the automatic transcript of the candi
 4. For each criterion, quote the candidate's own sentences as evidence. Copy the quotes word for word from the transcript you receive. Never invent quotes. Choose quotes that show both strengths and problems.
 5. For Pronunciation, base your judgement on what you heard in the audio (individual sounds, word and sentence stress, intonation, chunking, intelligibility). The transcript may contain recognition errors, so a strange word in the transcript can be a clue but is not proof.
 6. For each criterion, give 2 to 3 concrete, actionable improvements tied to the candidate's own mistakes, ideally with a "you said X, a better version is Y" example.
-7. If the test ended early and there is too little evidence, say so in the comments and give a cautious estimate.
+7. If the test ended early and there is too little evidence, say so in the comments and give a cautious estimate.${scopeNote}
 8. After calling submit_feedback, say one short sentence in Mandarin Chinese telling the candidate the written feedback is now on the screen, and then stop.`;
 }
 

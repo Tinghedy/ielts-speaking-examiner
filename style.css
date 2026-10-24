@@ -149,6 +149,19 @@ body {
 .parts li[data-status="current"] .num { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .parts li[data-status="done"] .num { border-color: var(--live); color: var(--live); }
 .parts li[data-status="todo"] b { color: var(--muted); }
+.parts li[data-status="skip"] { opacity: 0.35; }
+.parts li[data-status="skip"] b { color: var(--muted); text-decoration: line-through; }
+
+/* Practice mode */
+.mode { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.mode select {
+  font: inherit; font-weight: 400; color: var(--text);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.mode select:disabled { opacity: 0.6; }
 
 /* Timer */
 .timer {
@@ -357,5 +370,5 @@ body {
   .transcript-scroll { min-height: 240px; max-height: 55vh; }
   .hints-body { max-height: 32vh; }
   .hint-phrases { grid-template-columns: 1fr; }
-  .settings select { font-size: 16px; }
+  .settings select, .mode select { font-size: 16px; }
 }
