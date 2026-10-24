@@ -176,8 +176,8 @@ async function fetchStudyVocab(request, apiKey, signal) {
     );
     return { topics: cleanVocab(parseJsonReply(text)), ...groundingOf(candidate), searched: true };
   } catch (error) {
-    // Model or key without search access: still give a list from the model's own knowledge
-    if (error.status !== 400 && error.status !== 403) throw error;
+    // No search access or search quota used up: still give a list from the model's own knowledge
+    if (![400, 403, 429].includes(error.status)) throw error;
     console.warn("Search grounding unavailable, retrying without it:", error);
     const { text } = await generateContent(
       STUDY_MODEL,
@@ -189,7 +189,7 @@ async function fetchStudyVocab(request, apiKey, signal) {
       apiKey,
       options
     );
-    return { topics: cleanVocab(JSON.parse(text)), sources: [], searchHtml: "", searched: false };
+    return { topics: cleanVocab(JSON.parse(text)), sources: [], searchHtml: "", searched: false, searchQuota: error.status === 429 };
   }
 }
 

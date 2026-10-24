@@ -1190,7 +1190,13 @@ function renderVocab(box, data, note) {
     note("沒有產生單字。");
     return;
   }
-  if (!data.searched) note("這次無法使用 Google 搜尋，以下單字由模型依自身知識整理。");
+  if (!data.searched) {
+    note(
+      data.searchQuota
+        ? "Google 搜尋的額度用完了，以下單字改由模型依自身知識整理（沒有查過去考題與網路詞彙庫）。"
+        : "這次無法使用 Google 搜尋，以下單字由模型依自身知識整理。"
+    );
+  }
 
   for (const topic of data.topics) {
     const group = makeEl("div", "study-topic");

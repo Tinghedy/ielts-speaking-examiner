@@ -120,7 +120,11 @@ async function generateContent(model, request, apiKey, { signal, timeoutMs }) {
     );
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      const error = new Error(body?.error?.message || `HTTP ${response.status}`);
+      const message =
+        response.status === 429
+          ? "Gemini API 額度用完了（429）。免費方案有每分鐘與每天的上限，等一下再重試，或到 aistudio.google.com 查看用量與帳單。"
+          : body?.error?.message || `HTTP ${response.status}`;
+      const error = new Error(message);
       error.status = response.status;
       throw error;
     }
