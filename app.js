@@ -611,6 +611,7 @@ function resetExam() {
   });
   resetHints();
   resetStudy();
+  resetTutor();
   $("transcript").innerHTML = "";
   $("transcriptEmpty").hidden = false;
   $("feedback").hidden = true;
@@ -675,6 +676,7 @@ function render() {
   renderCueCard();
   renderHints();
   renderStudy();
+  renderTutor();
 }
 
 function renderStatus() {
@@ -1039,6 +1041,139 @@ function renderHintData(body, data, note) {
       ul.appendChild(li);
     }
     body.appendChild(ul);
+  }
+}
+
+// ─── Tutor review (tutor.js) ──────────────────────────────────────────────────
+
+const tutor = {
+  status: "idle", // idle | streaming | ready | error | nokey
+  turns: [], // { role: "user" | "model", text }; the first user turn is the prompt + transcript
+  error: "",
+  controller: null,
+  frame: 0, // pending render while streaming
+};
+
+function resetTutor() {
+  if (tutor.controller) tutor.controller.abort();
+  Object.assign(tutor, { status: "idle", turns: [], error: "", controller: null });
+  renderTutor();
+}
+
+function startTutor() {
+  const apiKey = loadApiKey();
+  if (!apiKey) {
+    tutor.status = "nokey";
+    renderTutor();
+    return;
+  }
+  tutor.turns = [{ role: "user", text: buildTutorOpening(transcriptAsText(), state.part2.card) }];
+  askTutor();
+}
+
+function replyTutor(text) {
+  if (!text.trim() || tutor.status !== "ready") return;
+  tutor.turns.push({ role: "user", text: text.trim() });
+  askTutor();
+}
+
+// Stream the tutor's answer to the last user turn
+function askTutor() {
+  const apiKey = loadApiKey();
+  if (!apiKey) {
+    tutor.status = "nokey";
+    renderTutor();
+    return;
+  }
+  if (tutor.controller) tutor.controller.abort();
+  const controller = new AbortController();
+  const reply = { role: "model", text: "" };
+  const history = [...tutor.turns];
+  tutor.turns.push(reply);
+  Object.assign(tutor, { status: "streaming", error: "", controller });
+  renderTutor();
+
+  streamTutor(history, apiKey, {
+    signal: controller.signal,
+    onText: (text) => {
+      if (tutor.controller !== controller) return;
+      reply.text = text;
+      // Re-render at most once per frame while text streams in
+      if (!tutor.frame) tutor.frame = requestAnimationFrame(() => ((tutor.frame = 0), renderTutor()));
+    },
+  })
+    .then((text) => {
+      if (tutor.controller !== controller) return;
+      reply.text = text;
+      tutor.status = "ready";
+    })
+    .catch((error) => {
+      if (tutor.controller !== controller) return;
+      console.error("Tutor failed:", error);
+      tutor.turns.splice(tutor.turns.indexOf(reply), 1); // a cut-off answer can't be continued
+      Object.assign(tutor, { status: "error", error: error.message });
+    })
+    .finally(() => {
+      if (tutor.controller !== controller) return;
+      tutor.controller = null;
+      renderTutor();
+    });
+}
+
+// Markdown → safe HTML; plain text if the libraries didn't load
+function renderMarkdown(el, text) {
+  if (window.marked && window.DOMPurify) {
+    el.innerHTML = DOMPurify.sanitize(marked.parse(text));
+    el.classList.remove("plain");
+  } else {
+    el.textContent = text;
+    el.classList.add("plain");
+  }
+}
+
+function renderTutor() {
+  const section = $("tutor");
+  const ended = [PHASE.FEEDBACK, PHASE.DONE].includes(state.phase);
+  section.hidden = !ended || !(tutor.turns.length || candidateSpoke());
+  if (section.hidden) return;
+
+  $("tutorStartBtn").hidden = tutor.turns.length > 0 || tutor.status === "streaming";
+  $("tutorForm").hidden = tutor.status !== "ready";
+  $("tutorSend").disabled = tutor.status !== "ready";
+
+  const log = $("tutorLog");
+  log.innerHTML = "";
+  tutor.turns.forEach((turn, i) => {
+    if (i === 0) return; // the prompt and transcript
+    const msg = makeEl("div", `tutor-msg ${turn.role}`);
+    if (turn.role === "model") {
+      const body = makeEl("div", "tutor-md");
+      renderMarkdown(body, turn.text || "…");
+      msg.appendChild(body);
+    } else {
+      msg.append(makeEl("span", "who", "我"), makeEl("p", "", turn.text));
+    }
+    log.appendChild(msg);
+  });
+
+  const status = $("tutorStatus");
+  status.innerHTML = "";
+  status.hidden = !["streaming", "error", "nokey"].includes(tutor.status);
+  status.dataset.kind = tutor.status === "streaming" ? "" : "error";
+  if (tutor.status === "streaming") {
+    status.textContent = "家教批改中…（完整批改約需 30–90 秒）";
+  } else if (tutor.status === "nokey") {
+    status.append("家教複習需要在「設定」填入 Gemini API key。 ");
+    const btn = makeEl("button", "link hints-action", "打開設定");
+    btn.type = "button";
+    btn.addEventListener("click", openSettings);
+    status.appendChild(btn);
+  } else if (tutor.status === "error") {
+    status.append(`批改失敗：${tutor.error} `);
+    const btn = makeEl("button", "link hints-action", "重試");
+    btn.type = "button";
+    btn.addEventListener("click", () => (tutor.turns.length ? askTutor() : startTutor()));
+    status.appendChild(btn);
   }
 }
 
@@ -1435,6 +1570,16 @@ function buildMarkdown() {
   }
 
 
+  const tutorTurns = tutor.turns.slice(1).filter((t) => t.text);
+  if (tutorTurns.length) {
+    md.push("", "## 家教複習", "");
+    for (const turn of tutorTurns) {
+      // Push the tutor's own headings below "## 家教複習"
+      const reply = turn.text.trim().replace(/^(#{1,4}) /gm, "##$1 ");
+      md.push(turn.role === "model" ? reply : `**我的回覆：**\n\n${quoteMd(turn.text)}`, "");
+    }
+  }
+
   const vocab = study.vocab.status === "ready" ? study.vocab.data : null;
   const fixes = study.fixes.status === "ready" ? study.fixes.data : null;
   if (vocab?.topics.length || fixes?.length) {
@@ -1573,6 +1718,7 @@ window.addEventListener("DOMContentLoaded", () => {
     for (const area of ["vocab", "fixes"]) {
       if (study[area].status === "nokey") startStudy(area);
     }
+    if (tutor.status === "nokey") tutor.turns.length ? askTutor() : startTutor();
   });
   $("clearKeyBtn").addEventListener("click", () => {
     saveApiKey("");
@@ -1598,6 +1744,17 @@ window.addEventListener("DOMContentLoaded", () => {
   hints.on = loadHintsPref();
   $("hintsToggle").addEventListener("change", (e) => setHintsOn(e.target.checked));
   $("studyStartBtn").addEventListener("click", () => startStudy());
+  $("tutorStartBtn").addEventListener("click", startTutor);
+  $("tutorForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("tutorInput");
+    if (tutor.status !== "ready" || !input.value.trim()) return;
+    replyTutor(input.value);
+    input.value = "";
+  });
+  $("tutorInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("tutorForm").requestSubmit();
+  });
 
   populateMics();
   renderApiKey();

@@ -142,6 +142,20 @@
         <p class="disclaimer">分數為 AI 依官方評分標準所做的估計，僅供練習參考。</p>
       </section>
 
+      <section id="tutor" class="tutor" hidden>
+        <div class="feedback-head">
+          <h2>家教複習</h2>
+          <button id="tutorStartBtn" class="btn primary small" type="button">家教複習（逐題批改）</button>
+        </div>
+        <p class="tip">把逐字稿交給 AI 家教逐題批改：結構、錯誤修正、詞彙升級、改寫示範，最後附片語表和練習題。可以在下面直接回覆家教，例如用新片語重新回答。</p>
+        <div id="tutorLog" class="tutor-log"></div>
+        <p id="tutorStatus" class="hints-note" hidden></p>
+        <form id="tutorForm" class="tutor-form" hidden>
+          <textarea id="tutorInput" rows="3" placeholder="回覆家教，例如用新片語重新回答…（⌘ / Ctrl + Enter 送出）" lang="en"></textarea>
+          <button id="tutorSend" class="btn primary small" type="submit">送出</button>
+        </form>
+      </section>
+
       <section id="study" class="study" hidden>
         <div class="feedback-head">
           <h2>背誦清單</h2>
@@ -169,6 +183,9 @@
   <script src="examiner.js"></script>
   <script src="hints.js"></script>
   <script src="study.js"></script>
+  <script src="tutor.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
   <script src="app.js"></script>
 </body>
 

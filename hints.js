@@ -97,42 +97,32 @@ function cleanHints(raw) {
   };
 }
 
+const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models";
+
+// Errors carry `status` (the HTTP status) when the API refused the request
+async function apiError(response) {
+  const body = await response.json().catch(() => null);
+  const message =
+    response.status === 429
+      ? "Gemini API 額度用完了（429）。免費方案有每分鐘與每天的上限，等一下再重試，或到 aistudio.google.com 查看用量與帳單。"
+      : body?.error?.message || `HTTP ${response.status}`;
+  const error = new Error(message);
+  error.status = response.status;
+  return error;
+}
+
 /**
- * One generateContent call with a timeout. Also used by study.js.
- * Returns { text, candidate } where candidate holds e.g. groundingMetadata.
- * Errors carry `status` (the HTTP status) when the API refused the request.
+ * Run a fetch with a timeout that also follows the caller's abort signal.
+ * `run` gets the combined signal; abort errors become "已取消" or "逾時".
  */
-async function generateContent(model, request, apiKey, { signal, timeoutMs }) {
+async function withTimeout(signal, timeoutMs, run) {
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), timeoutMs);
   const onAbort = () => timeout.abort();
   if (signal) signal.addEventListener("abort", onAbort);
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        signal: timeout.signal,
-        body: JSON.stringify(request),
-      }
-    );
-    const body = await response.json().catch(() => null);
-    if (!response.ok) {
-      const message =
-        response.status === 429
-          ? "Gemini API 額度用完了（429）。免費方案有每分鐘與每天的上限，等一下再重試，或到 aistudio.google.com 查看用量與帳單。"
-          : body?.error?.message || `HTTP ${response.status}`;
-      const error = new Error(message);
-      error.status = response.status;
-      throw error;
-    }
-
-    const candidate = body?.candidates?.[0] || {};
-    const text = (candidate.content?.parts || []).map((p) => p.text || "").join("");
-    if (!text) throw new Error("模型沒有回傳內容");
-    return { text, candidate };
+    return await run(timeout.signal);
   } catch (error) {
     if (error.name === "AbortError") throw new Error(signal?.aborted ? "已取消" : "逾時");
     throw error;
@@ -140,6 +130,28 @@ async function generateContent(model, request, apiKey, { signal, timeoutMs }) {
     clearTimeout(timer);
     if (signal) signal.removeEventListener("abort", onAbort);
   }
+}
+
+/**
+ * One generateContent call with a timeout. Also used by study.js.
+ * Returns { text, candidate } where candidate holds e.g. groundingMetadata.
+ */
+async function generateContent(model, request, apiKey, { signal, timeoutMs }) {
+  return withTimeout(signal, timeoutMs, async (combined) => {
+    const response = await fetch(`${GEMINI_API}/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      signal: combined,
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) throw await apiError(response);
+
+    const body = await response.json().catch(() => null);
+    const candidate = body?.candidates?.[0] || {};
+    const text = (candidate.content?.parts || []).map((p) => p.text || "").join("");
+    if (!text) throw new Error("模型沒有回傳內容");
+    return { text, candidate };
+  });
 }
 
 /**
