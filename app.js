@@ -12,6 +12,7 @@ const TIMING = {
   speakMinSec: 60,
   speakMaxSec: 120,
   examinerReplyTimeoutSec: 15, // unmute the mic even if the examiner never finishes a turn
+  examinerNudgeSec: 7, // remind the examiner to go on if it stays silent after an answer
   feedbackTimeoutSec: 150,
   maxReconnects: 3,
 };
@@ -453,17 +454,22 @@ function handleMessage(client, message, isResumed) {
       break;
 
     case MultimodalLiveResponseType.AUDIO:
+      state.lastExaminerAt = Date.now();
       state.examinerAudioReceived = true;
       if (state.player) state.player.play(message.data);
       break;
 
     case MultimodalLiveResponseType.INPUT_TRANSCRIPTION:
-      if (!message.data.finished) addTranscript("candidate", message.data.text);
+      if (!message.data.finished) {
+        state.lastCandidateAt = Date.now();
+        addTranscript("candidate", message.data.text);
+      }
       break;
 
     case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
       if (!message.data.finished) {
         if (state.part === 0 && state.phase === PHASE.EXAM) setPart(state.plan[0]);
+        state.lastExaminerAt = Date.now();
         addTranscript("examiner", message.data.text);
       }
       break;
@@ -608,6 +614,9 @@ function resetExam() {
     transcript: [],
     hintLog: [],
     examinerAudioReceived: false,
+    lastCandidateAt: 0,
+    lastExaminerAt: 0,
+    nudgedFor: 0, // lastCandidateAt of the answer we already nudged after
   });
   resetHints();
   resetStudy();
@@ -651,6 +660,7 @@ function tick() {
     const now = Date.now();
     if (state.part2.stage === "prep" && now >= state.part2.endsAt) finishPreparation();
     if (state.part2.stage === "speaking" && now >= state.part2.endsAt) finishLongTurn();
+    checkExaminerSilence(now);
   }
 
   if (
@@ -663,6 +673,20 @@ function tick() {
 
   renderTimer();
   renderMic();
+}
+
+// The Live model sometimes misses the end of an answer and never replies.
+// If the candidate has stopped talking and the examiner stays silent, nudge it once.
+function checkExaminerSilence(now) {
+  const answer = state.lastCandidateAt;
+  if (!answer || answer <= state.lastExaminerAt || state.nudgedFor === answer) return;
+  if (["prep", "waiting", "speaking"].includes(state.part2.stage)) return; // Part 2 handles its own turns
+  if (state.player && state.player.isPlaying()) return;
+  if (now - answer < TIMING.examinerNudgeSec * 1000) return;
+
+  state.nudgedFor = answer;
+  addTranscript("system", "（考官沒有回應，已提醒考官繼續）");
+  sendControl("The candidate has finished answering. Continue the test now with your next question.");
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
