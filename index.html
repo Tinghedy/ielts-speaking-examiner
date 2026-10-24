@@ -98,12 +98,29 @@
 
       <div class="transcript-head">
         <h2>逐字稿</h2>
-        <span class="legend"><i class="dot examiner"></i>Examiner <i class="dot candidate"></i>我</span>
+        <div class="head-right">
+          <span class="legend"><i class="dot examiner"></i>Examiner <i class="dot candidate"></i>我</span>
+          <label class="switch" title="考官問問題時，在畫面上顯示和題目相關的片語與單字">
+            <input id="hintsToggle" type="checkbox" role="switch" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-label">提示詞彙</span>
+          </label>
+        </div>
       </div>
+
+      <section id="hintsCard" class="hints" aria-live="polite" hidden>
+        <div class="hints-head">
+          <span class="hints-title">提示詞彙</span>
+          <span id="hintsFor" class="hints-for"></span>
+        </div>
+        <div id="hintsBody" class="hints-body"></div>
+      </section>
+
       <div id="transcriptScroll" class="transcript-scroll">
         <div id="transcriptEmpty" class="empty">
           按「開始考試」後允許麥克風，考官會先開口。<br />
-          考試中不會糾正或提示；結束後會產生中文回饋。
+          考官不會糾正或提示；需要的話可以打開右上的「提示詞彙」，在畫面上看題目相關的片語與單字。<br />
+          結束後會產生中文回饋。
         </div>
         <div id="transcript" class="transcript"></div>
       </div>
@@ -124,6 +141,7 @@
   <script src="mediaUtils.js"></script>
   <script src="question-bank.js"></script>
   <script src="examiner.js"></script>
+  <script src="hints.js"></script>
   <script src="app.js"></script>
 </body>
 

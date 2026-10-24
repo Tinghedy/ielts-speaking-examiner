@@ -47,6 +47,7 @@ const state = {
   feedbackRequestedAt: null,
   feedback: null,
   transcript: [], // { role: "examiner" | "candidate" | "system", text, part, open, el }
+  hintLog: [], // { part, label, data } for the Markdown export
   tickTimer: null,
 };
 
@@ -181,6 +182,7 @@ function startPart2Preparation(card) {
   }
   addTranscript("system", "開始 1 分鐘準備（麥克風暫停收音）");
   renderCueCard();
+  updateHints();
 }
 
 function finishPreparation() {
@@ -429,6 +431,8 @@ function handleMessage(client, message, isResumed) {
       const callbacks = state.afterTurn;
       state.afterTurn = [];
       callbacks.forEach((cb) => cb());
+      // Let the last bit of output transcription arrive before reading the question
+      if (hints.on) setTimeout(() => updateHints(), 300);
       break;
     }
 
@@ -559,8 +563,10 @@ function resetExam() {
     feedbackRequestedAt: null,
     feedback: null,
     transcript: [],
+    hintLog: [],
     examinerAudioReceived: false,
   });
+  resetHints();
   $("transcript").innerHTML = "";
   $("transcriptEmpty").hidden = false;
   $("feedback").hidden = true;
@@ -622,6 +628,7 @@ function render() {
   renderMic();
   renderTimer();
   renderCueCard();
+  renderHints();
 }
 
 function renderStatus() {
@@ -750,6 +757,240 @@ function renderCueCard() {
     list.appendChild(li);
   });
   $("cueFinal").textContent = card.final_point || "";
+}
+
+// ─── Vocabulary hints (hints.js) ──────────────────────────────────────────────
+
+const HINTS_STORAGE = "ielts-examiner.hints-on";
+const HINT_TRIGGER = /\?|\b(tell me|describe|talk about|explain)\b/i;
+
+const hints = {
+  on: false,
+  key: null, // what the current hints are for, to avoid asking twice
+  label: "",
+  status: "idle", // idle | loading | ready | error | nokey
+  data: null,
+  error: "",
+  controller: null,
+};
+
+function loadHintsPref() {
+  try {
+    return localStorage.getItem(HINTS_STORAGE) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveHintsPref(on) {
+  try {
+    localStorage.setItem(HINTS_STORAGE, on ? "1" : "0");
+  } catch {
+    // Private mode: the toggle just won't be remembered
+  }
+}
+
+function setHintsOn(on) {
+  hints.on = on;
+  saveHintsPref(on);
+  if (!on && hints.controller) {
+    // Drop a request in flight so turning it back on asks again
+    hints.controller.abort();
+    hints.controller = null;
+    hints.key = null;
+    hints.status = "idle";
+  }
+  if (on) updateHints();
+  renderHints();
+}
+
+function resetHints() {
+  if (hints.controller) hints.controller.abort();
+  Object.assign(hints, { key: null, label: "", status: "idle", data: null, error: "", controller: null });
+  renderHints();
+}
+
+function part2InProgress() {
+  return ["prep", "waiting", "speaking"].includes(state.part2.stage);
+}
+
+// The sentence to show above the hints, e.g. the question itself
+function questionLabel(text) {
+  const sentences = text.split(/(?<=[.?!])\s+/).map((s) => s.trim()).filter(Boolean);
+  return [...sentences].reverse().find((s) => s.includes("?")) || sentences[sentences.length - 1] || text;
+}
+
+// What the hints should be about right now, or null if there is nothing yet
+function currentHintRequest() {
+  if (state.phase !== PHASE.EXAM) return null;
+
+  // During Part 2 the hints stay on the cue card until the long turn is over
+  if (part2InProgress()) {
+    const card = state.part2.card;
+    return card && card.topic ? { part: 2, card, label: card.topic, key: `card:${card.topic}` } : null;
+  }
+
+  const entry = [...state.transcript].reverse().find((e) => e.role === "examiner");
+  if (!entry || entry.open || !HINT_TRIGGER.test(entry.text)) return null;
+  const question = entry.text.trim().slice(-500);
+  const card = state.part2.card?.topic || (state.examTopics ? `Describe ${state.examTopics.part2.card}` : "");
+  return {
+    part: state.part || 1,
+    question,
+    followsCard: state.part === 3 ? card : "",
+    label: questionLabel(question),
+    key: `q:${question}`,
+  };
+}
+
+function updateHints({ force = false } = {}) {
+  if (!hints.on) return;
+  const request = currentHintRequest();
+  if (!request) {
+    // Part 2 started without a cue card (manual button): old Part 1 hints don't fit
+    if (part2InProgress() && hints.key && !hints.key.startsWith("card:")) resetHints();
+    return;
+  }
+  if (!force && request.key === hints.key) return;
+
+  if (hints.controller) hints.controller.abort();
+  Object.assign(hints, { key: request.key, label: request.label, data: null, error: "", controller: null });
+
+  const apiKey = loadApiKey();
+  if (!apiKey) {
+    hints.status = "nokey";
+    renderHints();
+    return;
+  }
+
+  const controller = new AbortController();
+  hints.controller = controller;
+  hints.status = "loading";
+  renderHints();
+
+  fetchHints(request, apiKey, controller.signal)
+    .then((data) => {
+      if (hints.controller !== controller) return;
+      hints.status = "ready";
+      hints.data = data;
+      if (data.phrases.length || data.words.length) {
+        state.hintLog.push({ part: request.part, label: request.label, data });
+      }
+    })
+    .catch((error) => {
+      if (hints.controller !== controller) return;
+      console.error("Hints failed:", error);
+      hints.status = "error";
+      hints.error = error.message;
+    })
+    .finally(() => {
+      if (hints.controller !== controller) return;
+      hints.controller = null;
+      renderHints();
+    });
+}
+
+function makeEl(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function renderHints() {
+  const card = $("hintsCard");
+  $("hintsToggle").checked = hints.on;
+  const visible = hints.on && [PHASE.IDLE, PHASE.CONNECTING, PHASE.EXAM].includes(state.phase);
+  card.hidden = !visible;
+  if (!visible) return;
+
+  const body = $("hintsBody");
+  body.innerHTML = "";
+  const inExam = state.phase === PHASE.EXAM;
+  $("hintsFor").textContent = inExam ? hints.label : "";
+  card.dataset.status = inExam ? hints.status : "idle";
+
+  const note = (text, kind) => {
+    const p = makeEl("p", "hints-note", text);
+    if (kind) p.dataset.kind = kind;
+    body.appendChild(p);
+    return p;
+  };
+  const action = (text, onClick) => {
+    const btn = makeEl("button", "link hints-action", text);
+    btn.type = "button";
+    btn.addEventListener("click", onClick);
+    body.appendChild(btn);
+  };
+
+  if (!inExam) {
+    note("考試開始後，考官每問一題，這裡就會出現和題目相關的片語與單字。Part 2 準備時間會針對題卡給提示。");
+    return;
+  }
+
+  switch (hints.status) {
+    case "loading":
+      note("產生提示中…");
+      break;
+    case "nokey":
+      note("提示詞彙需要在「設定」填入 Gemini API key（用 server.py 啟動時的臨時憑證只能連考官的 Live API）。", "error");
+      action("打開設定", openSettings);
+      break;
+    case "error":
+      note(`提示產生失敗：${hints.error}`, "error");
+      action("重試", () => updateHints({ force: true }));
+      break;
+    case "ready":
+      renderHintData(body, hints.data, note);
+      break;
+    default:
+      note("等考官問下一題…");
+  }
+}
+
+function renderHintData(body, data, note) {
+  if (!data.starter && !data.phrases.length && !data.words.length) {
+    note("這題不需要提示");
+    return;
+  }
+
+  if (data.starter) {
+    const p = makeEl("p", "hint-starter");
+    p.append(makeEl("span", "hint-tag", "開頭"), makeEl("span", "", data.starter));
+    p.lastChild.lang = "en";
+    body.appendChild(p);
+  }
+
+  if (data.phrases.length) {
+    const ul = makeEl("ul", "hint-phrases");
+    for (const phrase of data.phrases) {
+      const li = makeEl("li");
+      const line = makeEl("div", "hint-line");
+      const en = makeEl("b", "", phrase.en);
+      en.lang = "en";
+      line.append(en, makeEl("span", "zh", phrase.zh));
+      li.appendChild(line);
+      if (phrase.example) {
+        const ex = makeEl("p", "hint-ex", phrase.example);
+        ex.lang = "en";
+        li.appendChild(ex);
+      }
+      ul.appendChild(li);
+    }
+    body.appendChild(ul);
+  }
+
+  if (data.words.length) {
+    const ul = makeEl("ul", "hint-words");
+    for (const word of data.words) {
+      const li = makeEl("li");
+      const en = makeEl("b", "", word.en);
+      en.lang = "en";
+      li.append(en, makeEl("span", "zh", word.zh));
+      ul.appendChild(li);
+    }
+    body.appendChild(ul);
+  }
 }
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
@@ -889,6 +1130,17 @@ function buildMarkdown() {
     md.push("", "_本次沒有產生回饋。_");
   }
 
+  if (state.hintLog.length) {
+    md.push("", "## 提示詞彙", "");
+    for (const { part, label, data } of state.hintLog) {
+      md.push(`### Part ${part}：${label}`, "");
+      if (data.starter) md.push(`開頭：${data.starter}`, "");
+      data.phrases.forEach((p) => md.push(`- **${p.en}** ${p.zh}${p.example ? ` — _${p.example}_` : ""}`));
+      if (data.words.length) md.push("", `單字：${data.words.map((w) => `**${w.en}** ${w.zh}`).join("、")}`);
+      md.push("");
+    }
+  }
+
   md.push("", "## 逐字稿", "", "_逐字稿由語音辨識自動產生，可能有辨識錯誤。_");
   let currentPart = -1;
   for (const entry of state.transcript) {
@@ -959,6 +1211,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("apiKeyInput").value = "";
     showNotice("");
     renderApiKey();
+    if (hints.status === "nokey") updateHints({ force: true });
   });
   $("clearKeyBtn").addEventListener("click", () => {
     saveApiKey("");
@@ -970,6 +1223,9 @@ window.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("beforeunload", (e) => {
     if ([PHASE.EXAM, PHASE.FEEDBACK].includes(state.phase)) e.preventDefault();
   });
+
+  hints.on = loadHintsPref();
+  $("hintsToggle").addEventListener("change", (e) => setHintsOn(e.target.checked));
 
   populateMics();
   renderApiKey();
