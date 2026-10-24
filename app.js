@@ -696,6 +696,7 @@ function renderButtons() {
   $("endBtn").disabled = !running;
   $("endBtn").textContent = state.phase === PHASE.FEEDBACK ? "停止等待回饋" : "結束考試";
   $("downloadBtn").disabled = running || state.transcript.length === 0;
+  $("copyBtn").disabled = running || !state.transcript.some((e) => e.role !== "system");
   $("manualPrepBtn").hidden = !(state.phase === PHASE.EXAM && state.part === 2 && state.part2.stage === "none");
   $("voiceSelect").disabled = running;
   $("micSelect").disabled = running;
@@ -1509,6 +1510,27 @@ function downloadMarkdown() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+async function copyConversation() {
+  const btn = $("copyBtn");
+  const text = transcriptAsText();
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Older browsers or no clipboard permission
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  btn.textContent = "已複製";
+  clearTimeout(copyConversation.timer);
+  copyConversation.timer = setTimeout(() => (btn.textContent = "Copy 我所有的對話"), 1500);
+}
+
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 async function populateMics() {
@@ -1535,6 +1557,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("startBtn").addEventListener("click", startExam);
   $("endBtn").addEventListener("click", onEndClick);
   $("downloadBtn").addEventListener("click", downloadMarkdown);
+  $("copyBtn").addEventListener("click", copyConversation);
   $("manualPrepBtn").addEventListener("click", () => startPart2Preparation(null));
   $("saveKeyBtn").addEventListener("click", () => {
     const key = $("apiKeyInput").value.trim();

@@ -124,6 +124,7 @@ body {
 .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .btn.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn.ghost { background: transparent; }
+.export { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .btn.small { font-size: 0.8rem; padding: 6px 10px; margin-top: 10px; }
 
 /* Part stepper */
