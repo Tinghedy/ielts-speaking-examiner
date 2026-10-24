@@ -98,41 +98,37 @@ function cleanHints(raw) {
 }
 
 /**
- * Generate hints for one question or cue card.
- * @param {{part:number, question?:string, card?:object, followsCard?:string}} request
- * @param {string} apiKey
- * @param {AbortSignal} [signal]
+ * One generateContent call with a timeout. Also used by study.js.
+ * Returns { text, candidate } where candidate holds e.g. groundingMetadata.
+ * Errors carry `status` (the HTTP status) when the API refused the request.
  */
-async function fetchHints(request, apiKey, signal) {
+async function generateContent(model, request, apiKey, { signal, timeoutMs }) {
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), HINT_TIMEOUT_MS);
+  const timer = setTimeout(() => timeout.abort(), timeoutMs);
   const onAbort = () => timeout.abort();
   if (signal) signal.addEventListener("abort", onAbort);
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${HINT_MODEL}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         signal: timeout.signal,
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: HINT_INSTRUCTION }] },
-          contents: [{ role: "user", parts: [{ text: buildHintPrompt(request) }] }],
-          generationConfig: {
-            temperature: 0.6,
-            responseMimeType: "application/json",
-            responseSchema: HINT_SCHEMA,
-          },
-        }),
+        body: JSON.stringify(request),
       }
     );
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(body?.error?.message || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(body?.error?.message || `HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
 
-    const text = (body?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+    const candidate = body?.candidates?.[0] || {};
+    const text = (candidate.content?.parts || []).map((p) => p.text || "").join("");
     if (!text) throw new Error("模型沒有回傳內容");
-    return cleanHints(JSON.parse(text));
+    return { text, candidate };
   } catch (error) {
     if (error.name === "AbortError") throw new Error(signal?.aborted ? "已取消" : "逾時");
     throw error;
@@ -140,4 +136,28 @@ async function fetchHints(request, apiKey, signal) {
     clearTimeout(timer);
     if (signal) signal.removeEventListener("abort", onAbort);
   }
+}
+
+/**
+ * Generate hints for one question or cue card.
+ * @param {{part:number, question?:string, card?:object, followsCard?:string}} request
+ * @param {string} apiKey
+ * @param {AbortSignal} [signal]
+ */
+async function fetchHints(request, apiKey, signal) {
+  const { text } = await generateContent(
+    HINT_MODEL,
+    {
+      systemInstruction: { parts: [{ text: HINT_INSTRUCTION }] },
+      contents: [{ role: "user", parts: [{ text: buildHintPrompt(request) }] }],
+      generationConfig: {
+        temperature: 0.6,
+        responseMimeType: "application/json",
+        responseSchema: HINT_SCHEMA,
+      },
+    },
+    apiKey,
+    { signal, timeoutMs: HINT_TIMEOUT_MS }
+  );
+  return cleanHints(JSON.parse(text));
 }

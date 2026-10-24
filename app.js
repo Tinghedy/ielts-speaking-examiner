@@ -229,6 +229,7 @@ function requestFeedback(endedByUser) {
 
   if (endedByUser && state.player) state.player.interrupt();
   addTranscript("system", endedByUser ? "考生按下結束，考試結束，產生回饋中…" : "考試結束，產生回饋中…");
+  startStudy();
 
   const send = (opening) =>
     sendControl(
@@ -609,6 +610,7 @@ function resetExam() {
     examinerAudioReceived: false,
   });
   resetHints();
+  resetStudy();
   $("transcript").innerHTML = "";
   $("transcriptEmpty").hidden = false;
   $("feedback").hidden = true;
@@ -672,6 +674,7 @@ function render() {
   renderTimer();
   renderCueCard();
   renderHints();
+  renderStudy();
 }
 
 function renderStatus() {
@@ -1038,6 +1041,250 @@ function renderHintData(body, data, note) {
   }
 }
 
+// ─── Study list after the test (study.js) ─────────────────────────────────────
+
+const study = {
+  vocab: { status: "idle", data: null, error: "" }, // idle | loading | ready | error | nokey
+  fixes: { status: "idle", data: null, error: "" },
+  controller: null,
+};
+
+function resetStudy() {
+  if (study.controller) study.controller.abort();
+  study.controller = null;
+  for (const area of ["vocab", "fixes"]) Object.assign(study[area], { status: "idle", data: null, error: "" });
+  renderStudy();
+}
+
+function candidateSpoke() {
+  return state.transcript.some((e) => e.role === "candidate" && e.text.trim());
+}
+
+// Examiner questions per part, as heard in the transcript
+function askedQuestions() {
+  const asked = {};
+  for (const entry of state.transcript) {
+    if (entry.role !== "examiner") continue;
+    const part = entry.part || state.plan[0];
+    const questions = entry.text.split(/(?<=[.?!])\s+/).map((q) => q.trim()).filter((q) => q.endsWith("?"));
+    asked[part] = [...(asked[part] || []), ...questions];
+  }
+  for (const part of Object.keys(asked)) asked[part] = [...new Set(asked[part])].slice(0, 20);
+  return asked;
+}
+
+// The topics of the parts that were actually reached
+function studyTopics() {
+  const topics = state.examTopics;
+  if (!topics) return [];
+  const reached = state.plan.filter((p) => p <= Math.max(state.part, state.plan[0]));
+  const list = [];
+  if (reached.includes(1)) {
+    for (const t of [topics.opener, ...topics.part1]) list.push({ part: 1, name: t.topic, samples: t.samples });
+  }
+  const card = state.part2.card;
+  const cardName = card?.topic || `Describe ${topics.part2.card}`;
+  if (reached.includes(2)) {
+    list.push({ part: 2, name: cardName, samples: card ? [...(card.bullet_points || []), card.final_point].filter(Boolean) : [] });
+  }
+  if (reached.includes(3)) {
+    const directions = PART3_DIRECTIONS[topics.part2.part3];
+    list.push({ part: 3, name: `Discussion following "${cardName}"`, samples: directions ? [directions] : [] });
+  }
+  return list;
+}
+
+function startStudy(only) {
+  const areas = only ? [only] : ["vocab", "fixes"];
+  if (!only && study.controller) study.controller.abort();
+  const controller = only && study.controller ? study.controller : new AbortController();
+  study.controller = controller;
+
+  const apiKey = loadApiKey();
+  const spoke = candidateSpoke();
+  for (const area of areas) {
+    const slot = study[area];
+    Object.assign(slot, { data: null, error: "" });
+    if (!apiKey) {
+      slot.status = "nokey";
+      continue;
+    }
+    if (area === "fixes" && !spoke) {
+      Object.assign(slot, { status: "ready", data: [] });
+      continue;
+    }
+    const request =
+      area === "vocab"
+        ? fetchStudyVocab({ topics: studyTopics(), asked: askedQuestions() }, apiKey, controller.signal)
+        : fetchStudyFixes(transcriptAsText(), apiKey, controller.signal);
+    slot.status = "loading";
+    request
+      .then((data) => {
+        if (study.controller !== controller) return;
+        Object.assign(slot, { status: "ready", data });
+      })
+      .catch((error) => {
+        if (study.controller !== controller) return;
+        console.error(`Study ${area} failed:`, error);
+        Object.assign(slot, { status: "error", error: error.message });
+      })
+      .finally(() => {
+        if (study.controller === controller) renderStudy();
+      });
+  }
+  renderStudy();
+}
+
+function renderStudy() {
+  const section = $("study");
+  const started = study.vocab.status !== "idle" || study.fixes.status !== "idle";
+  const ended = [PHASE.FEEDBACK, PHASE.DONE].includes(state.phase);
+  section.hidden = !ended || !(started || candidateSpoke());
+  if (section.hidden) return;
+
+  // The session ended without the normal ending (e.g. connection lost): offer to generate
+  $("studyStartBtn").hidden = started;
+  $("studyBody").hidden = !started;
+  if (!started) return;
+
+  renderStudyArea($("studyVocab"), "vocab", renderVocab);
+  renderStudyArea($("studyFixes"), "fixes", renderFixes);
+}
+
+function renderStudyArea(box, area, renderData) {
+  const slot = study[area];
+  box.innerHTML = "";
+  box.dataset.status = slot.status;
+  const note = (text, kind) => {
+    const p = makeEl("p", "hints-note", text);
+    if (kind) p.dataset.kind = kind;
+    box.appendChild(p);
+  };
+  const action = (text, onClick) => {
+    const btn = makeEl("button", "link hints-action", text);
+    btn.type = "button";
+    btn.addEventListener("click", onClick);
+    box.appendChild(btn);
+  };
+
+  switch (slot.status) {
+    case "loading":
+      note(area === "vocab" ? "正在搜尋過去考題與詞彙庫…（約 20–60 秒）" : "檢查你說錯的詞…");
+      break;
+    case "nokey":
+      note("背誦清單需要在「設定」填入 Gemini API key。", "error");
+      action("打開設定", openSettings);
+      break;
+    case "error":
+      note(`產生失敗：${slot.error}`, "error");
+      action("重試", () => startStudy(area));
+      break;
+    case "ready":
+      renderData(box, slot.data, note);
+      break;
+  }
+}
+
+function renderVocab(box, data, note) {
+  if (!data.topics.length) {
+    note("沒有產生單字。");
+    return;
+  }
+  if (!data.searched) note("這次無法使用 Google 搜尋，以下單字由模型依自身知識整理。");
+
+  for (const topic of data.topics) {
+    const group = makeEl("div", "study-topic");
+    const title = makeEl("h4", "", topic.part ? `Part ${topic.part} · ${topic.topic}` : topic.topic);
+    title.lang = "en";
+    group.appendChild(title);
+
+    if (topic.pastQuestions.length) {
+      const past = makeEl("details", "study-past");
+      past.appendChild(makeEl("summary", "", `過去考過的題目（${topic.pastQuestions.length}）`));
+      const ul = makeEl("ul");
+      for (const q of topic.pastQuestions) {
+        const li = makeEl("li", "", q);
+        li.lang = "en";
+        ul.appendChild(li);
+      }
+      past.appendChild(ul);
+      group.appendChild(past);
+    }
+
+    const ul = makeEl("ul", "hint-phrases");
+    for (const item of topic.items) {
+      const li = makeEl("li");
+      const line = makeEl("div", "hint-line");
+      const en = makeEl("b", "", item.en);
+      en.lang = "en";
+      line.append(en, makeEl("span", "zh", item.zh));
+      li.appendChild(line);
+      if (item.example) {
+        const ex = makeEl("p", "hint-ex", item.example);
+        ex.lang = "en";
+        li.appendChild(ex);
+      }
+      ul.appendChild(li);
+    }
+    group.appendChild(ul);
+    box.appendChild(group);
+  }
+
+  if (data.sources.length) {
+    const sources = makeEl("details", "study-sources");
+    sources.appendChild(makeEl("summary", "", `資料來源（${data.sources.length}）`));
+    const ul = makeEl("ul");
+    for (const { uri, title } of data.sources) {
+      const li = makeEl("li");
+      const a = makeEl("a", "", title);
+      a.href = uri;
+      a.target = "_blank";
+      a.rel = "noopener";
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    sources.appendChild(ul);
+    box.appendChild(sources);
+  }
+
+  // Google requires showing its search suggestions with grounded answers
+  if (data.searchHtml) {
+    const frame = makeEl("iframe", "study-search");
+    frame.title = "Google 搜尋建議";
+    frame.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    frame.srcdoc = `<base target="_blank">${data.searchHtml}`;
+    box.appendChild(frame);
+  }
+}
+
+function renderFixes(box, data, note) {
+  if (!data.length) {
+    note(candidateSpoke() ? "沒有找到明顯的用字錯誤。" : "這次沒有收到你的回答。");
+    return;
+  }
+  const ol = makeEl("ol", "study-fixes");
+  for (const fix of data) {
+    const li = makeEl("li");
+    const pair = makeEl("div", "fix-pair");
+    const wrong = makeEl("s", "fix-wrong", fix.wrong);
+    const right = makeEl("b", "fix-right", fix.right);
+    wrong.lang = right.lang = "en";
+    pair.append(wrong, makeEl("span", "fix-arrow", "→"), right, makeEl("span", "hint-tag", FIX_KINDS[fix.kind]));
+    li.appendChild(pair);
+    if (fix.original) {
+      const ctx = makeEl("p", "fix-context");
+      const said = makeEl("span", "", `“${fix.original}”`);
+      const better = makeEl("span", "", `“${fix.corrected}”`);
+      said.lang = better.lang = "en";
+      ctx.append(makeEl("span", "fix-label", "你說"), said, makeEl("span", "fix-label", "改成"), better);
+      li.appendChild(ctx);
+    }
+    if (fix.explanation) li.appendChild(makeEl("p", "fix-why", fix.explanation));
+    ol.appendChild(li);
+  }
+  box.appendChild(ol);
+}
+
 // ─── Feedback ─────────────────────────────────────────────────────────────────
 
 function bandOf(value) {
@@ -1180,6 +1427,38 @@ function buildMarkdown() {
     md.push("", "_本次沒有產生回饋。_");
   }
 
+
+  const vocab = study.vocab.status === "ready" ? study.vocab.data : null;
+  const fixes = study.fixes.status === "ready" ? study.fixes.data : null;
+  if (vocab?.topics.length || fixes?.length) {
+    md.push("", "## 背誦清單", "");
+    if (vocab?.topics.length) {
+      md.push("### 主題單字", "");
+      for (const topic of vocab.topics) {
+        md.push(`#### ${topic.part ? `Part ${topic.part} · ` : ""}${topic.topic}`, "");
+        if (topic.pastQuestions.length) {
+          md.push("過去考過的題目：", "", ...topic.pastQuestions.map((q) => `- ${q}`), "");
+        }
+        md.push("| 單字／片語 | 中文 | 例句 |", "| --- | --- | --- |");
+        const cell = (t) => t.replace(/\|/g, "\\|");
+        topic.items.forEach((i) => md.push(`| **${cell(i.en)}** | ${cell(i.zh)} | ${cell(i.example)} |`));
+        md.push("");
+      }
+      if (vocab.sources.length) {
+        md.push("資料來源：", "", ...vocab.sources.map((s) => `- [${s.title}](${s.uri})`), "");
+      }
+    }
+    if (fixes?.length) {
+      md.push("### 我說錯的詞", "");
+      fixes.forEach((f, i) => {
+        md.push(`${i + 1}. ~~${f.wrong}~~ → **${f.right}**（${FIX_KINDS[f.kind]}）`);
+        if (f.original) md.push(`   - 你說：_${f.original}_`, `   - 改成：_${f.corrected}_`);
+        if (f.explanation) md.push(`   - ${f.explanation}`);
+      });
+      md.push("");
+    }
+  }
+
   if (state.hintLog.length) {
     md.push("", "## 提示詞彙", "");
     for (const { part, label, data } of state.hintLog) {
@@ -1262,6 +1541,9 @@ window.addEventListener("DOMContentLoaded", () => {
     showNotice("");
     renderApiKey();
     if (hints.status === "nokey") updateHints({ force: true });
+    for (const area of ["vocab", "fixes"]) {
+      if (study[area].status === "nokey") startStudy(area);
+    }
   });
   $("clearKeyBtn").addEventListener("click", () => {
     saveApiKey("");
@@ -1286,6 +1568,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   hints.on = loadHintsPref();
   $("hintsToggle").addEventListener("change", (e) => setHintsOn(e.target.checked));
+  $("studyStartBtn").addEventListener("click", () => startStudy());
 
   populateMics();
   renderApiKey();

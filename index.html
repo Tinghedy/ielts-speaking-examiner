@@ -124,7 +124,7 @@
         <div id="transcriptEmpty" class="empty">
           按「開始考試」後允許麥克風，考官會先開口。<br />
           考官不會糾正或提示；需要的話可以打開右上的「提示詞彙」，在畫面上看題目相關的片語與單字。<br />
-          結束後會產生中文回饋。
+          結束後會產生中文回饋，以及可以背的主題單字與錯誤修正。
         </div>
         <div id="transcript" class="transcript"></div>
       </div>
@@ -138,6 +138,25 @@
         <div id="feedbackBody" class="criteria"></div>
         <p class="disclaimer">分數為 AI 依官方評分標準所做的估計，僅供練習參考。</p>
       </section>
+
+      <section id="study" class="study" hidden>
+        <div class="feedback-head">
+          <h2>背誦清單</h2>
+        </div>
+        <button id="studyStartBtn" class="btn small" type="button">產生背誦清單</button>
+        <div id="studyBody" class="study-body">
+          <div class="study-area">
+            <h3>主題單字</h3>
+            <p class="tip">用 Google 搜尋過去的考題與別人整理的詞彙庫，挑出這次話題值得背的單字和片語。</p>
+            <div id="studyVocab" class="study-content"></div>
+          </div>
+          <div class="study-area">
+            <h3>我說錯的詞</h3>
+            <p class="tip">從逐字稿找出用錯的字和說法，附上正確版本。語音辨識的錯字不算。</p>
+            <div id="studyFixes" class="study-content"></div>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -146,6 +165,7 @@
   <script src="question-bank.js"></script>
   <script src="examiner.js"></script>
   <script src="hints.js"></script>
+  <script src="study.js"></script>
   <script src="app.js"></script>
 </body>
 
