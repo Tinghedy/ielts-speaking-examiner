@@ -1,8 +1,11 @@
-# IELTS 口說模擬考
+# IELTS 口說模擬考＋寫作練習
 
-一位會開口說話的 AI 雅思考官。用語音跟你完整考一次 IELTS Speaking，考完給你中文回饋、可以背的單字，還有家教逐題批改。
+一位會開口說話的 AI 雅思考官。用語音跟你完整考一次 IELTS Speaking，考完給你中文回饋、可以背的單字，還有家教逐題批改。另外也有每天 5 分鐘的 Writing Task 2 拆段練習。
 
-👉 **馬上開始：<https://tinghedy.github.io/ielts-speaking-examiner/>**
+👉 **口說：<https://tinghedy.github.io/ielts-speaking-examiner/>**
+👉 **寫作：<https://tinghedy.github.io/ielts-speaking-examiner/writing/>**
+
+兩頁的左上角都可以切換「口說｜寫作」。
 
 ---
 
@@ -78,6 +81,21 @@
 - 照家教最後出的練習，用新片語重新回答一次，再讓家教批改，效果最好。
 - 同一個 Part 可以多練幾次，題目會自動換新。
 
+### 寫作練習：每天 5 分鐘
+
+沒有整塊時間練寫作時，把 Task 2 拆成 5–10 分鐘的小任務，每天做一個。寫作頁不需要 API key。
+
+- **A｜大綱日（5 分鐘）**：讀題後，在四段的格子裡用英文關鍵字填上立場、理由和例子，不用寫完整句子。
+- **B｜段落日（5–10 分鐘）**：選一份之前存的大綱，只把其中一段寫成完整段落。同一份大綱可以拆成 3–4 天練。週六可以選「整篇」，計時 40 分鐘寫完整篇。
+- **段落任務**：網站會依題型（Opinion、Discuss both views、Advantages / Disadvantages、Problem / Solution、Two-part question）告訴你每一段要做什麼，但立場、理由和例子要自己想，這正是考試在考的能力。
+- **一週節奏**：打開網站時，會依星期幾自動切到當天建議的練習，例如週三是「B 段落日：寫主體一」。
+- **計時器**：時間到只會提醒，不會鎖住，想寫完就繼續寫。開始打字時會自動開始計時。
+- **完成並儲存**：存進「練習紀錄」，也會計算連續練習天數。寫到一半關掉網頁，內容會自動保留。
+- **複製題目＋任務＋回答**：一鍵複製，方便貼給老師或 AI 批改。
+- 頁面下方有**自我檢查清單**（對應四項評分標準）和**常見錯誤**範例。
+
+> 小練習用來補強，不能取代完整的計時作文：每週至少寫 1 篇 40 分鐘的完整 Task 2。
+
 ### 常見問題
 
 **Q：要付錢嗎？**
@@ -140,6 +158,10 @@ python3 -m http.server 8000
 | `study.js` | 背誦清單：主題單字（Google Search grounding）與錯誤修正 |
 | `tutor.js` | 家教複習的 prompt 與串流請求 |
 | `manifest.webmanifest`、`icons/` | PWA（加入主畫面）設定 |
+| `writing/index.html` | 寫作練習頁（獨立頁面，共用 `../style.css` 的配色、頂部列與按鈕） |
+| `writing/writing.js` | 寫作頁邏輯：A／B 模式、計時、字數、草稿、儲存、複製、練習紀錄與連續天數 |
+| `writing/prompts.js` | 寫作題型與每段任務、題庫、一週節奏（`WEEK_PLAN`） |
+| `writing/writing.css`、`writing/manifest.webmanifest` | 寫作頁樣式與「加入主畫面」設定 |
 
 ### 使用的模型
 
@@ -178,6 +200,10 @@ python3 -m http.server 8000
 | `ielts-examiner.practice-mode` | 上次選的練習範圍 |
 | `ielts-examiner.hints-on` | 提示詞彙開關 |
 | `ielts-examiner.tutor-history` | 家教複習紀錄，最多 30 筆 |
+| `ielts-writing.records` | 寫作練習紀錄，最多 300 筆 |
+| `ielts-writing.current` | 本週的寫作題目（週一自動換新） |
+| `ielts-writing.recent` | 最近 3 個寫作題目（換題時避開） |
+| `ielts-writing.draft` | 寫到一半的大綱或段落 |
 
 ### 更新題庫
 
@@ -187,6 +213,10 @@ IELTS 口說題庫每年 1 月、5 月、9 月換季。換季時更新 `question
 - `PART1_OPENERS`、`PART1_TOPICS`：Part 1 話題與範例題
 - `PART2_CARDS`：Part 2 題卡（`part3` 對應 `PART3_DIRECTIONS` 的 key）
 - `isNew: true` 標記本季新題，抽中機率是舊題的兩倍
+
+### 新增寫作題目
+
+在 `writing/prompts.js` 的 `WRITING_PROMPTS` 加一筆 `{ id, type, prompt }`，`type` 要對應 `WRITING_TYPES` 的 key（`opinion`、`discuss`、`adv-disadv`、`problem-solution`、`two-part`）。`id` 不要重複，也不要改舊題的 `id`，練習紀錄會用到。
 
 ### 臨時憑證模式（`server.py`）
 

@@ -1,0 +1,175 @@
+/* IELTS writing practice. Colours, reset, top bar and buttons come from ../style.css */
+
+.w-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.w-main .btn.small { margin-top: 0; }
+
+/* Hero */
+.w-hero { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
+.w-hero h2 { font-size: 1.35rem; line-height: 1.35; }
+.w-hero p { color: var(--muted); font-size: 0.92rem; }
+.w-hero .w-today { color: var(--accent); font-weight: 600; }
+.w-hero .btn { align-self: flex-start; margin-top: 6px; }
+
+/* Cards */
+.w-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.w-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.w-card-head h3 { font-size: 1rem; }
+.w-card-head .btn { margin-left: auto; }
+.w-tag {
+  font-size: 0.75rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--panel-2); color: var(--muted);
+}
+.w-tag:empty { display: none; }
+.w-prompt { font-size: 1rem; line-height: 1.7; }
+
+/* Mode tabs */
+.w-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.w-mode {
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.w-mode b { font-size: 0.95rem; }
+.w-mode small { font-size: 0.78rem; color: var(--muted); }
+.w-mode[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.w-mode[aria-selected="true"] small { color: inherit; opacity: 0.85; }
+.w-mode-desc { font-size: 0.85rem; color: var(--muted); }
+
+/* Mode B controls */
+.w-bcontrols { display: flex; flex-direction: column; gap: 10px; }
+.w-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.w-field select {
+  font: inherit; font-weight: 400; color: var(--text);
+  padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--panel-2);
+  max-width: 100%;
+}
+.w-segments { display: flex; flex-wrap: wrap; gap: 6px; }
+.w-segment {
+  font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--text); cursor: pointer;
+  padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel);
+}
+.w-segment[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+
+/* Timer */
+.w-timer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.w-clock-box { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.w-clock { font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.w-timer-note { font-size: 0.8rem; color: var(--muted); }
+.w-timer[data-state="running"] .w-clock { color: var(--accent); }
+.w-timer[data-state="warn"] .w-clock, .w-timer[data-state="warn"] .w-timer-note { color: var(--warn); }
+.w-timer[data-state="over"] .w-clock, .w-timer[data-state="over"] .w-timer-note { color: var(--danger); }
+.w-timer-actions { display: flex; gap: 6px; align-items: center; }
+.w-timer-actions select {
+  font: inherit; font-size: 0.82rem; color: var(--text);
+  padding: 5px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel);
+}
+
+/* Paragraph task cards */
+.w-tasks { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.w-task {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.w-task[data-current="true"] { border-color: var(--accent); background: var(--examiner-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.w-task-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.w-num {
+  width: 22px; height: 22px; flex-shrink: 0; align-self: center;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-size: 0.75rem; font-weight: 700;
+  background: var(--panel-2); color: var(--muted);
+}
+.w-task[data-current="true"] .w-num { background: var(--accent); color: var(--accent-text); }
+.w-task-head b { font-size: 0.92rem; }
+.w-task-text { font-size: 0.85rem; color: var(--muted); flex: 1 1 220px; }
+.w-outline-line { font-size: 0.85rem; display: flex; gap: 8px; align-items: baseline; }
+.w-outline-tag { flex-shrink: 0; font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: var(--panel-2); color: var(--muted); }
+
+.w-keywords, .w-paragraph textarea {
+  width: 100%;
+  font: inherit; color: var(--text);
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel);
+  resize: vertical;
+}
+.w-keywords:focus, .w-paragraph textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.w-paragraph { display: flex; flex-direction: column; gap: 6px; }
+.w-paragraph-label { font-size: 0.85rem; font-weight: 600; }
+.w-paragraph textarea { line-height: 1.7; }
+
+.w-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.w-count { font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.w-footer-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Checklist */
+.w-checklist { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.w-checklist fieldset { border: 0; display: flex; flex-direction: column; gap: 6px; }
+.w-checklist legend { font-size: 0.85rem; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.w-checklist label { display: flex; gap: 8px; align-items: baseline; font-size: 0.88rem; cursor: pointer; }
+.w-checklist input { accent-color: var(--accent); flex-shrink: 0; transform: translateY(1px); }
+.w-checklist label:has(input:checked) { color: var(--muted); }
+
+/* Tables */
+.w-table-wrap { overflow-x: auto; }
+.w-table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+.w-table th, .w-table td { border-bottom: 1px solid var(--border); padding: 7px 8px; text-align: left; vertical-align: top; }
+.w-table th { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+#weekTable td:nth-child(-n+2) { white-space: nowrap; }
+.w-table s { color: var(--danger); }
+#weekTable tr[data-today="true"] td { background: var(--examiner-bg); font-weight: 600; }
+#weekTable tr[data-today="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Records */
+.w-records { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.w-record details { border: 1px solid var(--border); border-radius: 10px; }
+.w-record summary {
+  cursor: pointer; list-style: none;
+  padding: 8px 12px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.w-record summary::-webkit-details-marker { display: none; }
+.w-record summary b { font-size: 0.88rem; }
+.w-record-meta { font-size: 0.78rem; color: var(--muted); }
+.w-record-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.w-record-prompt { font-size: 0.82rem; color: var(--muted); }
+.w-record-text { white-space: pre-wrap; font: inherit; font-size: 0.88rem; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
+.w-record-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.w-delete { color: var(--danger); }
+
+@media (max-width: 600px) {
+  .w-main { padding: 12px 16px 40px; gap: 12px; }
+  .w-hero h2 { font-size: 1.2rem; }
+  .w-card { padding: 14px; }
+  .w-clock { font-size: 1.6rem; }
+  .w-keywords, .w-paragraph textarea, .w-field select, .w-timer-actions select { font-size: 16px; }
+}

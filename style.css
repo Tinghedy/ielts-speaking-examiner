@@ -66,6 +66,13 @@ body {
 .brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .brand h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.02em; }
 .subtitle { color: var(--muted); font-size: 0.85rem; }
+.site-nav { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--panel-2); align-self: center; }
+.site-nav a {
+  font-size: 0.82rem; font-weight: 600; color: var(--muted); text-decoration: none;
+  padding: 3px 12px; border-radius: 999px;
+}
+.site-nav a:hover { color: var(--text); }
+.site-nav a[aria-current="page"] { background: var(--panel); color: var(--accent); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 .topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .elapsed { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 3.5em; text-align: right; }
 

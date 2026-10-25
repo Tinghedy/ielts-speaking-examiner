@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>IELTS 寫作練習</title>
+  <meta name="description" content="IELTS Writing Task 2 每日 5 分鐘拆段練習" />
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#151614" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="IELTS 寫作" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="../style.css" />
+  <link rel="stylesheet" href="writing.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>IELTS 寫作練習</h1>
+      <nav class="site-nav" aria-label="練習項目">
+        <a href="../">口說</a>
+        <a href="./" aria-current="page">寫作</a>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <span id="streak" class="pill" data-kind="off">還沒開始連續練習</span>
+    </div>
+  </header>
+
+  <main class="w-main">
+    <section class="w-hero">
+      <h2>每天 5 分鐘，拆開練雅思寫作</h2>
+      <p>一次只練一段：今天列大綱，明天寫主體段，週末再組成一整篇。</p>
+      <p id="todayPlan" class="w-today"></p>
+      <button id="startBtn" class="btn primary" type="button">開始今天的練習</button>
+    </section>
+
+    <section class="w-card" aria-labelledby="promptHead">
+      <div class="w-card-head">
+        <h3 id="promptHead">今日題目</h3>
+        <span id="promptType" class="w-tag"></span>
+        <button id="swapBtn" class="btn small ghost" type="button">換一題</button>
+      </div>
+      <p id="promptText" class="w-prompt" lang="en"></p>
+      <p id="promptSource" class="tip" hidden></p>
+    </section>
+
+    <section id="practice" class="w-card w-practice" aria-label="練習區">
+      <div class="w-modes" role="tablist" aria-label="練習模式">
+        <button id="modeA" class="w-mode" role="tab" type="button" data-mode="A">
+          <b>A｜大綱日</b><small>5 分鐘列大綱</small>
+        </button>
+        <button id="modeB" class="w-mode" role="tab" type="button" data-mode="B">
+          <b>B｜段落日</b><small>5–10 分鐘寫一段</small>
+        </button>
+      </div>
+      <p id="modeDesc" class="w-mode-desc"></p>
+
+      <div id="bControls" class="w-bcontrols" hidden>
+        <label class="w-field">選擇大綱
+          <select id="outlineSelect"></select>
+        </label>
+        <div class="w-field">這次要寫
+          <div id="sectionPicker" class="w-segments" role="radiogroup" aria-label="要寫的段落"></div>
+        </div>
+      </div>
+
+      <div class="w-timer" data-state="idle">
+        <div class="w-clock-box">
+          <span id="timerClock" class="w-clock">5:00</span>
+          <span id="timerNote" class="w-timer-note">按開始，或直接開始打字</span>
+        </div>
+        <div class="w-timer-actions">
+          <select id="timerLength" aria-label="計時長度">
+            <option value="300">5 分鐘</option>
+            <option value="600">10 分鐘</option>
+            <option value="2400">40 分鐘</option>
+          </select>
+          <button id="timerToggle" class="btn small primary" type="button">開始</button>
+          <button id="timerReset" class="btn small ghost" type="button">重設</button>
+        </div>
+      </div>
+
+      <ol id="tasks" class="w-tasks"></ol>
+
+      <label id="paragraphBox" class="w-paragraph" hidden>
+        <span id="paragraphLabel" class="w-paragraph-label"></span>
+        <textarea id="paragraph" rows="9" lang="en" spellcheck="true" placeholder="Write your paragraph here…"></textarea>
+      </label>
+
+      <div class="w-footer">
+        <span id="wordCount" class="w-count">0 words</span>
+        <div class="w-footer-actions">
+          <button id="clearBtn" class="btn small ghost" type="button">清空</button>
+          <button id="copyBtn" class="btn small ghost" type="button">複製題目＋任務＋回答</button>
+          <button id="saveBtn" class="btn small primary" type="button">完成並儲存</button>
+        </div>
+      </div>
+      <p id="saveNote" class="tip" hidden></p>
+    </section>
+
+    <section class="w-card" aria-labelledby="checkHead">
+      <div class="w-card-head">
+        <h3 id="checkHead">自我檢查清單</h3>
+        <span id="checkCount" class="w-tag"></span>
+        <button id="checkReset" class="btn small ghost" type="button">全部取消</button>
+      </div>
+      <div id="checklist" class="w-checklist">
+        <fieldset>
+          <legend>Task Response</legend>
+          <label><input type="checkbox" />有明確回答題目問的事（題型要對上）</label>
+          <label><input type="checkbox" />開頭就看得出我的立場</label>
+          <label><input type="checkbox" />每個理由都有解釋和具體例子</label>
+        </fieldset>
+        <fieldset>
+          <legend>Coherence &amp; Cohesion</legend>
+          <label><input type="checkbox" />每段只講一個主要概念</label>
+          <label><input type="checkbox" />主題句放在段首</label>
+          <label><input type="checkbox" />連接詞用得自然，沒有硬塞</label>
+        </fieldset>
+        <fieldset>
+          <legend>Lexical Resource</legend>
+          <label><input type="checkbox" />有改寫題目，沒有整句照抄</label>
+          <label><input type="checkbox" />同一個字沒有一直重複</label>
+        </fieldset>
+        <fieldset>
+          <legend>Grammatical Range &amp; Accuracy</legend>
+          <label><input type="checkbox" />主詞與動詞一致、單複數正確</label>
+          <label><input type="checkbox" />沒有縮寫（it's → it is）</label>
+          <label><input type="checkbox" />至少一句複合句</label>
+        </fieldset>
+      </div>
+    </section>
+
+    <section class="w-card" aria-labelledby="weekHead">
+      <div class="w-card-head">
+        <h3 id="weekHead">一週節奏</h3>
+      </div>
+      <div class="w-table-wrap">
+        <table id="weekTable" class="w-table">
+          <thead><tr><th>星期</th><th>模式</th><th>任務</th></tr></thead>
+          <tbody>
+            <tr data-day="1"><td>一</td><td>A 大綱日</td><td>新題目，5 分鐘列大綱</td></tr>
+            <tr data-day="2"><td>二</td><td>B 段落日</td><td>寫開頭段</td></tr>
+            <tr data-day="3"><td>三</td><td>B 段落日</td><td>寫主體一</td></tr>
+            <tr data-day="4"><td>四</td><td>B 段落日</td><td>寫主體二</td></tr>
+            <tr data-day="5"><td>五</td><td>累積</td><td>抄一段範文，記下 3 組同義替換</td></tr>
+            <tr data-day="6"><td>六</td><td>完整寫作</td><td>40 分鐘計時寫完整篇</td></tr>
+            <tr data-day="0"><td>日</td><td>檢討</td><td>對照清單修改，找人或用工具批改</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tip">小練習用來補強，不能取代完整的計時作文：每週至少寫 1 篇 40 分鐘的完整 Task 2。</p>
+    </section>
+
+    <section class="w-card" aria-labelledby="mistakeHead">
+      <div class="w-card-head">
+        <h3 id="mistakeHead">常見錯誤</h3>
+      </div>
+      <div class="w-table-wrap">
+        <table class="w-table">
+          <thead><tr><th>原句</th><th>問題</th><th>修改</th></tr></thead>
+          <tbody>
+            <tr><td lang="en"><s>Many people discussed that whether…</s></td><td>whether 前不加 that，現象用現在式</td><td lang="en">Many people discuss whether…</td></tr>
+            <tr><td lang="en"><s>…and other think…</s></td><td>other 當名詞要用複數</td><td lang="en">…and others think…</td></tr>
+            <tr><td lang="en"><s>it's not important</s></td><td>正式寫作避免縮寫，且沒對上題目的「required」</td><td lang="en">it is not necessary to make these courses compulsory</td></tr>
+            <tr><td>（開頭只並列兩方說法）</td><td>Opinion 題缺少立場，會影響 Task Response</td><td lang="en">結尾加上 In my view, …</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="w-card" aria-labelledby="recordHead">
+      <div class="w-card-head">
+        <h3 id="recordHead">練習紀錄</h3>
+        <span id="recordCount" class="w-tag"></span>
+      </div>
+      <p id="recordEmpty" class="tip">按「完成並儲存」後，練習會存在這台裝置的瀏覽器裡。B 段落日會從這裡的大綱挑一份來寫。</p>
+      <ul id="records" class="w-records"></ul>
+    </section>
+  </main>
+
+  <script src="prompts.js"></script>
+  <script src="writing.js"></script>
+</body>
+
+</html>
