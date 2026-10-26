@@ -2,18 +2,12 @@
  * IELTS Speaking examiner: system instruction, topic bank and exam tools.
  */
 
-// Topics come from question-bank.js. New topics this season are drawn twice as
-// often, and topics used in recent sessions on this device are skipped.
-const RECENT_STORAGE = "ielts-examiner.recent-topics";
-const RECENT_LIMIT = { opener: 2, part1: 8, part2: 12 };
-
-function loadRecent() {
-  try {
-    return JSON.parse(localStorage.getItem(RECENT_STORAGE)) || {};
-  } catch {
-    return {};
-  }
-}
+// Topics come from question-bank.js and are drawn like a shuffled deck: every
+// topic comes up once before any topic comes up again. New topics this season
+// count half a use, so they come up twice per round. Topics from the last few
+// sessions (COOLDOWN) are never drawn, even when they're due. Usage is kept per browser.
+const USAGE_STORAGE = "ielts-examiner.topic-usage";
+const OLD_RECENT_STORAGE = "ielts-examiner.recent-topics";
 
 // Which parts each practice mode covers, in order
 const PRACTICE_MODES = {
@@ -24,48 +18,88 @@ const PRACTICE_MODES = {
   p3: { parts: [3], label: "只練 Part 3" },
 };
 
-// Only topics that were actually used count as recent
+// How many recent sessions to skip, per group
+const COOLDOWN = { opener: 2, part1: 4, part2: 8 };
+
+const TOPIC_GROUPS = {
+  opener: { list: () => PART1_OPENERS, nameOf: (t) => t.topic },
+  part1: { list: () => PART1_TOPICS, nameOf: (t) => t.topic },
+  part2: { list: () => PART2_CARDS, nameOf: (c) => c.card },
+};
+
+// { opener|part1|part2: { counts: { name: uses }, recent: [[names], ...] newest session first } }
+function loadUsage() {
+  let usage = null;
+  try {
+    usage = JSON.parse(localStorage.getItem(USAGE_STORAGE));
+  } catch {
+    usage = null;
+  }
+  if (usage) return usage;
+
+  // First run with this version: treat the old "recent topics" as used once
+  usage = {};
+  let recent = {};
+  try {
+    recent = JSON.parse(localStorage.getItem(OLD_RECENT_STORAGE)) || {};
+  } catch {
+    recent = {};
+  }
+  for (const key of Object.keys(TOPIC_GROUPS)) {
+    const names = recent[key] || [];
+    usage[key] = { counts: Object.fromEntries(names.map((n) => [n, 1])), recent: names.map((n) => [n]) };
+  }
+  return usage;
+}
+
+// Called once the examiner has actually started, so failed connections don't use up topics
 function rememberTopics(selection, parts) {
-  const recent = loadRecent();
-  const push = (key, values) => {
-    recent[key] = [...values, ...(recent[key] || []).filter((v) => !values.includes(v))].slice(0, RECENT_LIMIT[key]);
+  const usage = loadUsage();
+  const use = (key, items) => {
+    const { nameOf } = TOPIC_GROUPS[key];
+    const group = usage[key] || (usage[key] = { counts: {}, recent: [] });
+    for (const item of items) group.counts[nameOf(item)] = (group.counts[nameOf(item)] || 0) + (item.isNew ? 0.5 : 1);
+    group.recent = [items.map(nameOf), ...(group.recent || [])].slice(0, COOLDOWN[key]);
   };
   if (parts.includes(1)) {
-    push("opener", [selection.opener.topic]);
-    push("part1", selection.part1.map((t) => t.topic));
+    use("opener", [selection.opener]);
+    use("part1", selection.part1);
   }
-  if (parts.includes(2) || parts.includes(3)) push("part2", [selection.part2.card]);
+  if (parts.includes(2) || parts.includes(3)) use("part2", [selection.part2]);
   try {
-    localStorage.setItem(RECENT_STORAGE, JSON.stringify(recent));
+    localStorage.setItem(USAGE_STORAGE, JSON.stringify(usage));
   } catch {
     // Private mode: repeats are possible, nothing else breaks
   }
 }
 
-// Weighted draw without replacement; falls back to the full list if too few remain
-function drawTopics(list, count, recentNames, nameOf) {
-  const fresh = list.filter((item) => !recentNames.includes(nameOf(item)));
-  const pool = fresh.length >= count ? [...fresh] : [...list];
+// Draw from the least-used topics, skipping recent sessions' when possible
+function drawTopics(key, count, usage) {
+  const { list, nameOf } = TOPIC_GROUPS[key];
+  const { counts = {}, recent = [] } = usage[key] || {};
+  const cooling = recent.slice(0, COOLDOWN[key]).flat();
+  const uses = (item) => counts[nameOf(item)] || 0;
+  const pool = [...list()];
   const picked = [];
   while (picked.length < count && pool.length) {
-    const weights = pool.map((item) => (item.isNew ? 2 : 1));
-    let r = Math.random() * weights.reduce((a, b) => a + b, 0);
-    let i = 0;
-    while (r >= weights[i]) r -= weights[i++];
-    picked.push(pool.splice(i, 1)[0]);
+    const fresh = pool.filter((item) => !cooling.includes(nameOf(item)));
+    const candidates = fresh.length ? fresh : pool;
+    const least = Math.min(...candidates.map(uses));
+    const tier = candidates.filter((item) => uses(item) === least);
+    const item = tier[Math.floor(Math.random() * tier.length)];
+    picked.push(item);
+    pool.splice(pool.indexOf(item), 1);
   }
   return picked;
 }
 
-function pickExamTopics(parts) {
-  const recent = loadRecent();
-  const selection = {
-    opener: drawTopics(PART1_OPENERS, 1, recent.opener || [], (t) => t.topic)[0],
-    part1: drawTopics(PART1_TOPICS, 2, recent.part1 || [], (t) => t.topic),
-    part2: drawTopics(PART2_CARDS, 1, recent.part2 || [], (c) => c.card)[0],
+function pickExamTopics() {
+  const usage = loadUsage();
+  return {
+    opener: drawTopics("opener", 1, usage)[0],
+    part1: drawTopics("part1", 2, usage),
+    part2: drawTopics("part2", 1, usage)[0],
   };
-  rememberTopics(selection, parts);
-  return selection;
 }
 
 function describeTopic({ topic, samples }) {

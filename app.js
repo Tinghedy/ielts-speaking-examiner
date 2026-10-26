@@ -423,7 +423,7 @@ async function startExam() {
     await state.streamer.start($("micSelect").value || null);
     populateMics();
 
-    state.examTopics = pickExamTopics(state.plan);
+    state.examTopics = pickExamTopics();
     state.systemInstruction = buildSystemInstruction(state.examTopics, state.plan);
     state.client = await createClient(null);
     state.streamer.client = state.client;
@@ -468,7 +468,11 @@ function handleMessage(client, message, isResumed) {
 
     case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
       if (!message.data.finished) {
-        if (state.part === 0 && state.phase === PHASE.EXAM) setPart(state.plan[0]);
+        if (state.part === 0 && state.phase === PHASE.EXAM) {
+          // The examiner has started: these topics now count as used
+          rememberTopics(state.examTopics, state.plan);
+          setPart(state.plan[0]);
+        }
         state.lastExaminerAt = Date.now();
         addTranscript("examiner", message.data.text);
       }

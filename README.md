@@ -17,7 +17,7 @@
 
 - **真人感的模擬考**：AI 考官用英國腔跟你對話，流程照真正的 IELTS 口說考試走（Part 1 問答 → Part 2 題卡長答 → Part 3 延伸討論）。
 - **想練哪段就練哪段**：可以考完整一輪，也可以只練 Part 1、Part 2、Part 3，或 Part 2 + 3。
-- **題目跟著考季走**：題庫來自本季考生回報的題目，最近考過的話題會盡量避開。
+- **題目跟著考季走**：題庫來自本季考生回報的題目。抽題像洗牌：每個話題都輪過一次才會重複，最近幾次考過的話題一定不會抽到；本季新題比較常出，每輪會出現兩次。
 - **考完立刻有回饋**：依官方四項評分標準估分，並引用你自己說過的句子，告訴你怎麼改。
 - **幫你整理要背的單字**：搜尋過去的考題和別人整理好的詞彙庫，列出這次話題值得背的單字和片語，還會挑出你說錯的字並附上正確說法。
 - **AI 家教逐題批改**：檢查每一題的答題結構，修正錯誤、升級用字，改寫一個更高分的版本，最後出練習題給你。你可以直接回覆家教，讓它再批改一次。
@@ -194,7 +194,7 @@ python3 -m http.server 8000
 | Key | 內容 |
 | --- | --- |
 | `ielts-examiner.gemini-api-key` | 使用者的 API key |
-| `ielts-examiner.recent-topics` | 最近用過的話題（抽題時避開） |
+| `ielts-examiner.topic-usage` | 每個話題被考過幾次，以及最近幾次考試的話題（抽題用） |
 | `ielts-examiner.practice-mode` | 上次選的練習範圍 |
 | `ielts-examiner.hints-on` | 提示詞彙開關 |
 | `ielts-examiner.tutor-history` | 家教複習紀錄，最多 30 筆 |
@@ -210,7 +210,8 @@ IELTS 口說題庫每年 1 月、5 月、9 月換季。換季時更新 `question
 - `QUESTION_BANK_LABEL`：考季名稱
 - `PART1_OPENERS`、`PART1_TOPICS`：Part 1 話題與範例題
 - `PART2_CARDS`：Part 2 題卡（`part3` 對應 `PART3_DIRECTIONS` 的 key）
-- `isNew: true` 標記本季新題，抽中機率是舊題的兩倍
+- `isNew: true` 標記本季新題，每輪會出現兩次（舊題一次）
+- 抽題邏輯在 `examiner.js` 的 `drawTopics()`：從被考過次數最少的話題裡隨機抽，並跳過最近幾次考試用過的話題（`COOLDOWN`）。考官開口後才記為考過，連線失敗不會用掉題目
 
 ### 新增寫作題目
 
