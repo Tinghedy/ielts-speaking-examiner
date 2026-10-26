@@ -96,14 +96,3 @@ const WRITING_PROMPTS = [
       "Many people now get their news mainly from social media. Why is this happening? Is this a positive or negative development?",
   },
 ];
-
-// What to do each day of the week (0 = Sunday), from the weekly rhythm
-const WEEK_PLAN = {
-  1: { mode: "A", minutes: 5, text: "週一｜A 大綱日：新題目，5 分鐘列大綱" },
-  2: { mode: "B", section: "intro", minutes: 5, text: "週二｜B 段落日：寫開頭段" },
-  3: { mode: "B", section: "body1", minutes: 10, text: "週三｜B 段落日：寫主體一" },
-  4: { mode: "B", section: "body2", minutes: 10, text: "週四｜B 段落日：寫主體二" },
-  5: { text: "週五｜累積：抄一段範文，記下 3 組同義替換" },
-  6: { mode: "B", section: "full", minutes: 40, text: "週六｜完整寫作：40 分鐘計時寫完整篇" },
-  0: { text: "週日｜檢討：對照下方的檢查清單修改，找人或用工具批改" },
-};

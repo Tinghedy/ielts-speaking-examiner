@@ -14,7 +14,6 @@
 .w-hero { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
 .w-hero h2 { font-size: 1.35rem; line-height: 1.35; }
 .w-hero p { color: var(--muted); font-size: 0.92rem; }
-.w-hero .w-today { color: var(--accent); font-weight: 600; }
 .w-hero .btn { align-self: flex-start; margin-top: 6px; }
 
 /* Cards */
@@ -130,24 +129,6 @@
 .w-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .w-count { font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
 .w-footer-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-
-/* Checklist */
-.w-checklist { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-.w-checklist fieldset { border: 0; display: flex; flex-direction: column; gap: 6px; }
-.w-checklist legend { font-size: 0.85rem; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
-.w-checklist label { display: flex; gap: 8px; align-items: baseline; font-size: 0.88rem; cursor: pointer; }
-.w-checklist input { accent-color: var(--accent); flex-shrink: 0; transform: translateY(1px); }
-.w-checklist label:has(input:checked) { color: var(--muted); }
-
-/* Tables */
-.w-table-wrap { overflow-x: auto; }
-.w-table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
-.w-table th, .w-table td { border-bottom: 1px solid var(--border); padding: 7px 8px; text-align: left; vertical-align: top; }
-.w-table th { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
-#weekTable td:nth-child(-n+2) { white-space: nowrap; }
-.w-table s { color: var(--danger); }
-#weekTable tr[data-today="true"] td { background: var(--examiner-bg); font-weight: 600; }
-#weekTable tr[data-today="true"] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* Records */
 .w-records { list-style: none; display: flex; flex-direction: column; gap: 6px; }

@@ -86,13 +86,11 @@
 沒有整塊時間練寫作時，把 Task 2 拆成 5–10 分鐘的小任務，每天做一個。寫作頁不需要 API key。
 
 - **A｜大綱日（5 分鐘）**：讀題後，在四段的格子裡用英文關鍵字填上立場、理由和例子，不用寫完整句子。
-- **B｜段落日（5–10 分鐘）**：選一份之前存的大綱，只把其中一段寫成完整段落。同一份大綱可以拆成 3–4 天練。週六可以選「整篇」，計時 40 分鐘寫完整篇。
+- **B｜段落日（5–10 分鐘）**：選一份之前存的大綱，只把其中一段寫成完整段落。同一份大綱可以拆成 3–4 天練。也可以選「整篇」，計時 40 分鐘寫完整篇。
 - **段落任務**：網站會依題型（Opinion、Discuss both views、Advantages / Disadvantages、Problem / Solution、Two-part question）告訴你每一段要做什麼，但立場、理由和例子要自己想，這正是考試在考的能力。
-- **一週節奏**：打開網站時，會依星期幾自動切到當天建議的練習，例如週三是「B 段落日：寫主體一」。
 - **計時器**：時間到只會提醒，不會鎖住，想寫完就繼續寫。開始打字時會自動開始計時。
 - **完成並儲存**：存進「練習紀錄」，也會計算連續練習天數。寫到一半關掉網頁，內容會自動保留。
 - **複製題目＋任務＋回答**：一鍵複製，方便貼給老師或 AI 批改。
-- 頁面下方有**自我檢查清單**（對應四項評分標準）和**常見錯誤**範例。
 
 > 小練習用來補強，不能取代完整的計時作文：每週至少寫 1 篇 40 分鐘的完整 Task 2。
 
@@ -160,7 +158,7 @@ python3 -m http.server 8000
 | `manifest.webmanifest`、`icons/` | PWA（加入主畫面）設定 |
 | `writing/index.html` | 寫作練習頁（獨立頁面，共用 `../style.css` 的配色、頂部列與按鈕） |
 | `writing/writing.js` | 寫作頁邏輯：A／B 模式、計時、字數、草稿、儲存、複製、練習紀錄與連續天數 |
-| `writing/prompts.js` | 寫作題型與每段任務、題庫、一週節奏（`WEEK_PLAN`） |
+| `writing/prompts.js` | 寫作題型與每段任務、題庫 |
 | `writing/writing.css`、`writing/manifest.webmanifest` | 寫作頁樣式與「加入主畫面」設定 |
 
 ### 使用的模型
@@ -201,7 +199,7 @@ python3 -m http.server 8000
 | `ielts-examiner.hints-on` | 提示詞彙開關 |
 | `ielts-examiner.tutor-history` | 家教複習紀錄，最多 30 筆 |
 | `ielts-writing.records` | 寫作練習紀錄，最多 300 筆 |
-| `ielts-writing.current` | 本週的寫作題目（週一自動換新） |
+| `ielts-writing.current` | 目前練習的寫作題目（按「換一題」才會換） |
 | `ielts-writing.recent` | 最近 3 個寫作題目（換題時避開） |
 | `ielts-writing.draft` | 寫到一半的大綱或段落 |
 

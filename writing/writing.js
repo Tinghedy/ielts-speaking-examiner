@@ -7,7 +7,7 @@
 
 const STORE = {
   records: "ielts-writing.records",
-  current: "ielts-writing.current", // { id, setOn } of today's prompt
+  current: "ielts-writing.current", // { id, setOn } of the prompt being practised
   recent: "ielts-writing.recent", // last prompt ids, to avoid repeats
   draft: "ielts-writing.draft",
 };
@@ -589,13 +589,10 @@ function startToday() {
 
 function init() {
   const today = localDate();
-  const day = new Date().getDay();
-  const plan = WEEK_PLAN[day];
 
-  // Today's prompt: keep it through the week, a new one on Monday
+  // Keep the same prompt until "換一題", so an outline can be written up over several days
   const current = load(STORE.current, null);
-  const known = current && WRITING_PROMPTS.some((p) => p.id === current.id);
-  if (known && !(day === 1 && current.setOn < today)) W.promptId = current.id;
+  if (current && WRITING_PROMPTS.some((p) => p.id === current.id)) W.promptId = current.id;
   else pickPrompt();
 
   const draft = load(STORE.draft, null);
@@ -610,18 +607,8 @@ function init() {
       paragraph: draft.paragraph || "",
     });
     if (W.outlineId && !outlines().some((r) => r.id === W.outlineId)) W.outlineId = outlines()[0]?.id || null;
-  } else if (plan.mode) {
-    // A new day: set things up the way the weekly rhythm suggests
-    W.mode = plan.mode;
-    W.section = plan.section || "intro";
-    W.outlineId = outlines()[0]?.id || null;
   }
-  // Today's suggested length when the learner is doing today's task, otherwise the mode's default
-  const onPlan = plan.mode === W.mode && (W.mode === "A" || plan.section === W.section);
-  setTimerLength(onPlan ? plan.minutes * 60 : defaultLength());
-
-  $("todayPlan").textContent = `今天：${plan.text.split("｜")[1]}`;
-  document.querySelector(`#weekTable tr[data-day="${day}"]`).dataset.today = "true";
+  setTimerLength(defaultLength());
 
   $("startBtn").addEventListener("click", startToday);
   $("swapBtn").addEventListener("click", swapPrompt);
@@ -650,15 +637,6 @@ function init() {
     await copyText(copyTextFor(currentEntry()));
     flash($("copyBtn"), "已複製");
   });
-
-  const boxes = [...document.querySelectorAll("#checklist input")];
-  const renderChecks = () => ($("checkCount").textContent = `${boxes.filter((b) => b.checked).length} / ${boxes.length}`);
-  boxes.forEach((b) => b.addEventListener("change", renderChecks));
-  $("checkReset").addEventListener("click", () => {
-    boxes.forEach((b) => (b.checked = false));
-    renderChecks();
-  });
-  renderChecks();
 
   render();
   setInterval(() => {
